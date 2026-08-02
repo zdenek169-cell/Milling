@@ -1,0 +1,1341 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Millplan Web</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Millplan Web">
+<meta name="theme-color" content="#101d27">
+<link rel="manifest" id="manifest-link">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders:wght@500;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#101d27; --panel:#16283499; --panel2:#1c3140; --line:#3c5a6b; --line-dim:#284051;
+  --chalk:#bcd6de; --amber:#d99150; --amber-dim:#8a6138; --text:#e9eef0; --text-dim:#8fa6b0;
+  --red:#e2664a; --green:#7fb88a; --radius:2px;
+}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased;}
+.app{max-width:460px;margin:0 auto;min-height:100vh;background:
+  repeating-linear-gradient(0deg,transparent,transparent 27px,#ffffff05 28px),
+  repeating-linear-gradient(90deg,transparent,transparent 27px,#ffffff05 28px),
+  var(--bg);border-left:0.5px solid var(--line-dim);border-right:0.5px solid var(--line-dim);}
+header{padding:20px 18px 14px;border-bottom:0.5px solid var(--line);}
+.eyebrow{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.14em;color:var(--amber);text-transform:uppercase;}
+h1{font-family:'Big Shoulders',sans-serif;font-weight:700;font-size:32px;letter-spacing:.01em;margin:2px 0 0;text-transform:uppercase;}
+.tabs{display:flex;border-bottom:0.5px solid var(--line);overflow-x:auto;}
+.tab{flex:1;padding:12px 6px;text-align:center;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.06em;color:var(--text-dim);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;}
+.tab.active{color:var(--amber);border-bottom-color:var(--amber);}
+main{padding:18px;padding-bottom:60px;}
+h2{font-family:'Big Shoulders',sans-serif;font-weight:600;font-size:22px;text-transform:uppercase;letter-spacing:.02em;margin:0 0 4px;}
+.sub{color:var(--text-dim);font-size:13px;margin:0 0 18px;line-height:1.5;}
+.panel{background:var(--panel);border:0.5px solid var(--line);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px;}
+.row{display:flex;gap:10px;margin-bottom:10px;}
+.row:last-child{margin-bottom:0;}
+label{display:block;font-size:11px;font-family:'IBM Plex Mono',monospace;letter-spacing:.05em;color:var(--text-dim);text-transform:uppercase;margin-bottom:5px;}
+.field{flex:1;}
+input[type=number],input[type=text]{width:100%;background:var(--panel2);border:0.5px solid var(--line);color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:15px;padding:9px 10px;border-radius:var(--radius);}
+input[type=number]:focus,input[type=text]:focus{outline:none;border-color:var(--amber);}
+.unit{color:var(--text-dim);font-size:12px;margin-left:6px;}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.seg{display:flex;border:0.5px solid var(--line);border-radius:var(--radius);overflow:hidden;}
+.seg button{flex:1;background:var(--panel2);color:var(--text-dim);border:none;padding:10px;font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:.04em;cursor:pointer;text-transform:uppercase;}
+.seg button.active{background:var(--amber);color:#1a1006;}
+.checkrow{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:0.5px solid var(--line-dim);}
+.checkrow:last-child{border-bottom:none;}
+.checkrow .name{font-family:'IBM Plex Mono',monospace;font-size:14px;}
+.checkrow .dim{color:var(--text-dim);font-size:11px;margin-left:8px;}
+.chk{width:18px;height:18px;border:0.5px solid var(--line);border-radius:2px;cursor:pointer;display:flex;align-items:center;justify-content:center;background:var(--panel2);flex-shrink:0;}
+.chk.on{background:var(--amber);border-color:var(--amber);}
+.chk.on::after{content:'';width:9px;height:5px;border-left:2px solid #1a1006;border-bottom:2px solid #1a1006;transform:rotate(-45deg) translate(0,-1px);}
+.pct{display:flex;align-items:center;gap:8px;}
+.pct input{width:64px;text-align:right;}
+.btn{background:var(--panel2);border:0.5px solid var(--line);color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:.05em;padding:10px 14px;border-radius:var(--radius);cursor:pointer;text-transform:uppercase;}
+.btn:hover{border-color:var(--chalk);}
+.btn.primary{background:var(--amber);color:#1a1006;border-color:var(--amber);font-weight:600;}
+.btn.small{padding:6px 10px;font-size:11px;}
+.btn.danger{color:var(--red);border-color:var(--red);}
+.beamcard{border:0.5px solid var(--amber-dim);border-radius:var(--radius);padding:12px;margin-bottom:10px;background:#d9915012;}
+.beamcard .hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
+.beamcard .hd .name{font-family:'IBM Plex Mono',monospace;color:var(--amber);font-size:12px;letter-spacing:.05em;text-transform:uppercase;}
+.warn{color:var(--red);font-size:12px;font-family:'IBM Plex Mono',monospace;margin-top:6px;}
+canvas{width:100%;display:block;background:var(--panel2);border:0.5px solid var(--line);border-radius:var(--radius);}
+.statgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;}
+.stat{background:var(--panel2);border-radius:var(--radius);padding:12px 14px;}
+.stat .label{font-family:'IBM Plex Mono',monospace;font-size:13px;letter-spacing:.06em;color:var(--text-dim);text-transform:uppercase;}
+.stat .val{font-family:'Big Shoulders',sans-serif;font-size:30px;font-weight:700;color:var(--amber);line-height:1.1;margin-top:2px;}
+table{width:100%;border-collapse:collapse;font-family:'IBM Plex Mono',monospace;font-size:16px;}
+table th{text-align:left;font-size:13px;letter-spacing:.06em;color:var(--text-dim);text-transform:uppercase;padding:0 0 8px;border-bottom:0.5px solid var(--line);}
+table td{padding:8px 0;border-bottom:0.5px solid var(--line-dim);}
+table td:last-child,table th:last-child{text-align:right;}
+.footnote{font-size:11px;color:var(--text-dim);line-height:1.6;margin-top:14px;}
+.rangebtn{display:flex;gap:8px;margin-bottom:16px;}
+.rangebtn button{flex:1;}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="eyebrow" id="eyebrow">Sawmill planner — prototype v1</div>
+    <h1>Millplan Web</h1>
+  </header>
+  <div class="tabs" id="tabs"></div>
+  <main id="main"></main>
+</div>
+<script>
+// ---------- state ----------
+// ---------- version tracking ----------
+// Bump APP_VERSION on any deploy. Bump SOFTWOOD_VERSION / HARDWOOD_VERSION only when
+// that specific engine's logic changes, so you can tell at a glance which plan you're
+// looking at came from which version of the math. Softwood is locked as of sw-3 —
+// changes from here on should only touch hardwood unless you say otherwise.
+const APP_VERSION = 'v11';
+const SOFTWOOD_VERSION = 'sw-3 (locked)';
+const HARDWOOD_VERSION = 'hw-6';
+
+const state = {
+  tab: 'settings',
+  settings: {
+    kerf: 0.082,
+    dims: {
+      '1x4': {w:3.625,h:0.75}, '1x6':{w:5.625,h:0.75}, '1x8':{w:7.625,h:0.75}, '1x10':{w:9.625,h:0.75},
+      '2x4': {w:3.625,h:1.6},  '2x6':{w:5.625,h:1.6},  '2x8':{w:7.625,h:1.6},  '2x10':{w:9.625,h:1.6},
+      '4x4': {w:3.625,h:3.625}, '6x6':{w:5.625,h:5.625}, '8x8':{w:7.625,h:7.625},
+      '4/4':{h:1.0}, '5/4':{h:1.25}, '6/4':{h:1.5}, '8/4':{h:2.0}
+    }
+  },
+  log: { largeDia:16, smallDia:12, length:120, bow:1, species:'softwood' },
+  softwood: {
+    selected: {'2x4':true,'2x6':true,'1x6':false,'1x8':false,'2x8':false,'2x10':false,'1x4':false,'1x10':false,'4x4':false,'6x6':false,'8x8':false},
+    percents: {'2x4':40,'2x6':60},
+    beams: [],
+    kerfOverride: null
+  },
+  hardwood: {
+    selected: {'4/4':true,'5/4':false,'6/4':false,'8/4':false},
+    percents: {'4/4':100},
+    desiredWidth: 6,
+    kerfOverride: null
+  },
+  results: null,
+  resultMode: 'max'
+};
+
+const SOFTWOOD_ORDER = ['1x4','1x6','1x8','1x10','2x4','2x6','2x8','2x10','4x4','6x6','8x8'];
+const HARDWOOD_ORDER = ['4/4','5/4','6/4','8/4'];
+
+// ---------- geometry / algorithm ----------
+function taperDia(x,L,dL,dS){ return dL - (dL-dS)*(x/L); }
+function bowOffset(x,L,bow){ return 4*bow*(x/L)*(1-x/L); }
+function sampleXs(L,n){ const xs=[]; for(let i=0;i<=n;i++) xs.push(L*i/n); return xs; }
+
+function cantMaxWidth(c,H,xs,L,dL,dS,bow){
+  let minVal = Infinity;
+  for(const x of xs){
+    const r = taperDia(x,L,dL,dS)/2;
+    const y = bowOffset(x,L,bow);
+    const e = Math.abs(c-y) + H/2;
+    if(e >= r) return 0;
+    const w = 2*Math.sqrt(r*r - e*e);
+    if(w < minVal) minVal = w;
+  }
+  return minVal===Infinity?0:minVal;
+}
+
+function halfExtentAt(x,L,dL,dS,horizOffset){
+  const r = taperDia(x,L,dL,dS)/2;
+  const rem = r*r - horizOffset*horizOffset;
+  return rem>0 ? Math.sqrt(rem) : 0;
+}
+
+function priorityPack(W,H,orderNames,dims,percents,kerf,useProportional){
+  const effPercents = {};
+  let totalP = orderNames.reduce((s,n)=>s+(percents[n]||0),0);
+  if(totalP<=0){ orderNames.forEach(n=>effPercents[n]=100/orderNames.length); totalP=100; }
+  else orderNames.forEach(n=>effPercents[n]=percents[n]||0);
+
+  let remH=H, yCursor=0;
+  const counts={}; orderNames.forEach(n=>counts[n]=0);
+  const placements=[];
+
+  function placeRows(name,rows){
+    const bw=dims[name].w, bh=dims[name].h;
+    const perRow = Math.floor((W+kerf)/(bw+kerf));
+    if(perRow<=0 || rows<=0) return;
+    for(let ri=0; ri<rows; ri++){
+      for(let ci=0; ci<perRow; ci++){
+        placements.push({name,x:ci*(bw+kerf), y:yCursor+ri*(bh+kerf), width:bw, height:bh, rotated: dims[name].rotated});
+      }
+    }
+    counts[name]+=rows*perRow;
+    remH -= rows*(bh+kerf);
+    yCursor += rows*(bh+kerf);
+  }
+
+  if(useProportional){
+    for(const name of orderNames){
+      const bh=dims[name].h, bw=dims[name].w;
+      if(bw>W+1e-9) continue;
+      const budget = H*(effPercents[name]/totalP);
+      let rows = Math.floor((budget+1e-9)/(bh+kerf));
+      const maxRows = Math.floor((remH+kerf)/(bh+kerf));
+      rows = Math.min(rows,maxRows);
+      placeRows(name,rows);
+    }
+  }
+  let progress=true;
+  while(progress){
+    progress=false;
+    for(const name of orderNames){
+      const bh=dims[name].h, bw=dims[name].w;
+      if(bw>W+1e-9) continue;
+      const rows = Math.floor((remH+kerf)/(bh+kerf));
+      if(rows>0){ placeRows(name,rows); progress=true; }
+    }
+  }
+  return {counts, placements, remH, yCursor};
+}
+
+function bestOrientation(name, dims, W, H, kerf){
+  const d = dims[name];
+  const normalFits = d.w<=W+1e-9 && d.h<=H+1e-9;
+  const rotFits = d.h<=W+1e-9 && d.w<=H+1e-9;
+  if(normalFits) return {w:d.w,h:d.h,rotated:false};
+  if(rotFits) return {w:d.h,h:d.w,rotated:true};
+  return {w:d.w,h:d.h,rotated:false};
+}
+
+function effectiveDimsFor(names, dims, W, H, kerf){
+  const eff = {};
+  names.forEach(n=>{ eff[n] = bestOrientation(n,dims,W,H,kerf); });
+  return eff;
+}
+
+function fallbackFill(W, remH, yCursorStart, names, effDims, kerf){
+  let remaining = remH, yCursor = yCursorStart;
+  const counts = {}; names.forEach(n=>counts[n]=0);
+  const placements = [];
+  function placeRows(name, rows){
+    const bw=effDims[name].w, bh=effDims[name].h;
+    const perRow = Math.floor((W+kerf)/(bw+kerf));
+    if(perRow<=0 || rows<=0) return;
+    for(let ri=0; ri<rows; ri++){
+      for(let ci=0; ci<perRow; ci++){
+        placements.push({name,x:ci*(bw+kerf), y:yCursor+ri*(bh+kerf), width:bw, height:bh, rotated:effDims[name].rotated});
+      }
+    }
+    counts[name]+=rows*perRow;
+    remaining -= rows*(bh+kerf);
+    yCursor += rows*(bh+kerf);
+  }
+  let progress=true;
+  while(progress){
+    progress=false;
+    for(const name of names){
+      const bh=effDims[name].h, bw=effDims[name].w;
+      if(bw>W+1e-9) continue;
+      const rows = Math.floor((remaining+kerf)/(bh+kerf));
+      if(rows>0){ placeRows(name,rows); progress=true; }
+    }
+  }
+  return {counts, placements};
+}
+
+function packZone(W,H,orderNames,fallbackNames,dims,percents,kerf,useProportional){
+  if(W<=0||H<=0) return {primaryCounts:{}, bonusCounts:{}, placements:[]};
+  const effPrimary = effectiveDimsFor(orderNames,dims,W,H,kerf);
+  const primary = priorityPack(W,H,orderNames,effPrimary,percents,kerf,useProportional);
+  let bonus = {counts:{}, placements:[]};
+  if(fallbackNames.length){
+    const effFallback = effectiveDimsFor(fallbackNames,dims,W,H,kerf);
+    bonus = fallbackFill(W, primary.remH, primary.yCursor, fallbackNames, effFallback, kerf);
+  }
+  const placements = [
+    ...primary.placements.map(p=>({...p,bonus:false})),
+    ...bonus.placements.map(p=>({...p,bonus:true}))
+  ];
+  return {primaryCounts:primary.counts, bonusCounts:bonus.counts, placements};
+}
+
+function buildOrder(selectedNames, mode, dims, percents){
+  const arr = selectedNames.slice();
+  if(mode==='max') arr.sort((a,b)=> dims[b].w - dims[a].w);
+  else arr.sort((a,b)=> (percents[b]||0) - (percents[a]||0));
+  return arr;
+}
+
+function boardCount(counts){ return Object.values(counts).reduce((a,b)=>a+b,0); }
+
+function scoreArea(counts, dims){
+  let s = 0;
+  for(const [name,c] of Object.entries(counts)) s += (dims[name].w*dims[name].h)*c;
+  return s;
+}
+
+function findBindingSlice(c,H,xs,L,dL,dS,bow){
+  let minW=Infinity, best=null;
+  for(const x of xs){
+    const r = taperDia(x,L,dL,dS)/2;
+    const y = bowOffset(x,L,bow);
+    const e = Math.abs(c-y)+H/2;
+    const w = e<r ? 2*Math.sqrt(r*r-e*e) : 0;
+    if(w<minW){ minW=w; best={x,r,y,w}; }
+  }
+  return best;
+}
+
+function groupByWidth(names, dims){
+  const map = {};
+  names.forEach(n=>{
+    const w = dims[n].w;
+    if(!map[w]) map[w]=[];
+    map[w].push(n);
+  });
+  return Object.entries(map).map(([w,ns])=>({width:parseFloat(w), names:ns})).sort((a,b)=>b.width-a.width);
+}
+
+function cantMaxHeightForWidth(c,W,xs,L,dL,dS,bow){
+  let minVal=Infinity;
+  for(const x of xs){
+    const r=taperDia(x,L,dL,dS)/2;
+    const y=bowOffset(x,L,bow);
+    const rem=r*r-(W/2)*(W/2);
+    if(rem<0) return 0;
+    const avail=Math.sqrt(rem)-Math.abs(c-y);
+    if(avail<minVal) minVal=avail;
+  }
+  return Math.max(0,2*minVal);
+}
+
+function findBestCantForWidth(W,xs,L,dL,dS,bow,cRange,step){
+  let best=null;
+  for(let c=-cRange; c<=cRange; c+=step){
+    const H=cantMaxHeightForWidth(c,W,xs,L,dL,dS,bow);
+    if(!best||H>best.H) best={c,H};
+  }
+  return best;
+}
+
+function totalPercentOf(g, percents){ return g.names.reduce((s,n)=>s+(percents[n]||0),0); }
+
+function chooseActiveGroups(mode, groups, dims, percents, xs, L, dL, dS, bow, kerf, cRangeBase){
+  if(mode==='max'){
+    const n = groups.length;
+    let best=null;
+    for(let mask=1; mask<(1<<n); mask++){
+      const subset = groups.filter((g,i)=> mask & (1<<i));
+      const Wt = subset.reduce((s,g)=>s+g.width,0) + kerf*(subset.length-1);
+      const cant = findBestCantForWidth(Wt, xs,L,dL,dS,bow, cRangeBase, 0.25);
+      if(!cant || cant.H<2) continue;
+      let bf=0;
+      subset.forEach(g=>{
+        const packed = packZone(g.width, cant.H, buildOrder(g.names,'mix',dims,percents), [], dims, percents, kerf, true);
+        bf += Object.entries(packed.primaryCounts).reduce((s,[nm,cnt])=>s+boardFeet(dims[nm].w,dims[nm].h,L,cnt),0);
+      });
+      if(!best || bf>best.bf) best={groups:subset, cant, bf};
+    }
+    return best ? {activeGroups:best.groups, cant:best.cant} : {activeGroups:[], cant:null};
+  }
+  let activeGroups = groups.slice();
+  let cant=null, Wt=0;
+  while(activeGroups.length){
+    Wt = activeGroups.reduce((s,g)=>s+g.width,0) + kerf*(activeGroups.length-1);
+    cant = findBestCantForWidth(Wt, xs,L,dL,dS,bow, cRangeBase, 0.25);
+    if(cant && cant.H>=2) break;
+    activeGroups.sort((a,b)=> totalPercentOf(a,percents)-totalPercentOf(b,percents));
+    activeGroups.shift();
+    cant=null;
+  }
+  return {activeGroups, cant};
+}
+
+function placeBeam(Wb,Hb,placement,xs,L,dL,dS,bow){
+  let c;
+  if(placement==='boxed'){ c=0; }
+  else {
+    const cLow = -(Hb/2)-0.05;
+    const cHigh = bow+Hb/2+0.05;
+    const wLow = cantMaxWidth(cLow,Hb,xs,L,dL,dS,bow);
+    const wHigh = cantMaxWidth(cHigh,Hb,xs,L,dL,dS,bow);
+    c = wLow>=wHigh ? cLow : cHigh;
+  }
+  const fitW = cantMaxWidth(c,Hb,xs,L,dL,dS,bow);
+  if(fitW < Wb) return {fits:false,c};
+  return {fits:true,c};
+}
+
+function boardFeet(w,h,L,count){ return (w*h*L*count)/144; }
+
+function logVolumeBF(dL,dS,L){
+  const R1=dL/2, R2=dS/2;
+  return (Math.PI*L/3)*(R1*R1+R1*R2+R2*R2)/144;
+}
+
+function runSoftwood(mode){
+  const {largeDia:dL, smallDia:dS, length:L, bow} = state.log;
+  const xs = sampleXs(L,26);
+  const kerf = state.softwood.kerfOverride ?? state.settings.kerf;
+  const dims = state.settings.dims;
+  const selectedNames = SOFTWOOD_ORDER.filter(n=>state.softwood.selected[n]);
+  const percents = state.softwood.percents;
+  const fallbackNames = SOFTWOOD_ORDER.filter(n=>!state.softwood.selected[n])
+    .sort((a,b)=> dims[a].h-dims[b].h || dims[a].w-dims[b].w);
+  const orderNamesForPockets = buildOrder(selectedNames, 'mix', dims, percents);
+
+  let beamResults = [];
+  let usedBeamEnvelope = null;
+  const beams = state.softwood.beams;
+  if(beams.length===1){
+    const b = beams[0];
+    const r = placeBeam(b.w,b.h,b.placement,xs,L,dL,dS,bow);
+    beamResults.push({...b, ...r});
+    if(r.fits) usedBeamEnvelope = {Wb:b.w,Hb:b.h,c:r.c};
+  } else if(beams.length===2){
+    const H = Math.max(beams[0].h, beams[1].h);
+    const Wtot = beams[0].w + beams[1].w + kerf;
+    const placement = beams[0].placement;
+    const r = placeBeam(Wtot,H,placement,xs,L,dL,dS,bow);
+    beams.forEach(b=>beamResults.push({...b, fits:r.fits, c:r.c}));
+    if(r.fits) usedBeamEnvelope = {Wb:Wtot,Hb:H,c:r.c};
+  }
+
+  function mirrorPlacements(placements, zoneW, zoneH, axis){
+    return placements.map(p=>{
+      if(axis==='y') return {...p, y: zoneH - p.y - p.height};
+      if(axis==='x') return {...p, x: zoneW - p.x - p.width};
+      return p;
+    });
+  }
+
+  function packPocketsAround(Wb,Hb,c){
+    const right = orderNamesForPockets.length ? searchSidePocket(Wb/2+kerf, xs,L,dL,dS,bow, orderNamesForPockets, fallbackNames, dims, kerf, percents, dL/2, 0.25) : null;
+    const top = orderNamesForPockets.length ? searchVerticalPocket(c+Hb/2+kerf, 1, xs,L,dL,dS,bow, orderNamesForPockets, fallbackNames, dims, kerf, percents, dL, 0.25) : null;
+    const bot = orderNamesForPockets.length ? searchVerticalPocket(c-Hb/2-kerf, -1, xs,L,dL,dS,bow, orderNamesForPockets, fallbackNames, dims, kerf, percents, dL, 0.25) : null;
+    const zones = [];
+    if(right && right.w>=0.3 && right.subH>=0.3){
+      zones.push({name:'right', W:right.w, H:right.subH, cxIn:Wb/2+kerf+right.w/2, cyIn:right.subC, mirror:null});
+      zones.push({name:'left', W:right.w, H:right.subH, cxIn:-(Wb/2+kerf+right.w/2), cyIn:right.subC, mirror:'x'});
+    }
+    if(top && top.subW>=0.3 && top.h>=0.3){
+      zones.push({name:'top', W:top.subW, H:top.h, cxIn:0, cyIn:c+Hb/2+kerf+top.h/2, mirror:'y'});
+    }
+    if(bot && bot.subW>=0.3 && bot.h>=0.3){
+      zones.push({name:'bottom', W:bot.subW, H:bot.h, cxIn:0, cyIn:c-Hb/2-kerf-bot.h/2, mirror:null});
+    }
+    return zones.map(z=>{
+      const packed = orderNamesForPockets.length ? packZone(z.W,z.H,orderNamesForPockets,fallbackNames,dims,percents,kerf,true) : {primaryCounts:{},bonusCounts:{},placements:[]};
+      const placements = z.mirror ? mirrorPlacements(packed.placements, z.W, z.H, z.mirror) : packed.placements;
+      return {...z, ...packed, placements};
+    });
+  }
+
+
+  let wingResults = [];
+  let mainCant = null;
+  let segments = [];
+  let envelope = null;
+  const anyBeamInfeasible = beamResults.some(b=>!b.fits);
+
+  if(usedBeamEnvelope && !anyBeamInfeasible){
+    const {Wb,Hb,c} = usedBeamEnvelope;
+    wingResults = packPocketsAround(Wb,Hb,c);
+    const slice = findBindingSlice(c,Hb,xs,L,dL,dS,bow);
+    envelope = {r:slice.r, y:slice.y};
+  } else if(!beams.length && selectedNames.length){
+    const groups = groupByWidth(selectedNames,dims);
+    const {activeGroups, cant} = chooseActiveGroups(mode, groups, dims, percents, xs,L,dL,dS,bow,kerf, Math.max(bow*1.5,1));
+    if(cant){
+      const Wt = activeGroups.reduce((s,g)=>s+g.width,0) + kerf*(activeGroups.length-1);
+      let xCursor = -Wt/2;
+      const rawSegments = activeGroups.map(g=>{
+        const packed = packZone(g.width, cant.H, buildOrder(g.names,'mix',dims,percents), [], dims, percents, kerf, true);
+        const seg = {width:g.width, names:g.names, cxIn:xCursor+g.width/2, packed};
+        xCursor += g.width + kerf;
+        return seg;
+      });
+
+      // shrink the cant to the actual used height (tallest segment) before evaluating wings,
+      // so leftover material inside the theoretical cant becomes available to the pocket search
+      const usedHeights = rawSegments.map(seg=>
+        seg.packed.placements.reduce((m,p)=>Math.max(m, p.y+p.height), 0)
+      );
+      let actualH = Math.max(0, ...usedHeights);
+      if(actualH<=0 || actualH>cant.H) actualH = cant.H;
+      const topEdge = cant.c + cant.H/2;
+      const actualC = topEdge - actualH/2;
+
+      mainCant = {W:Wt, H:actualH, c:actualC};
+      segments = rawSegments.map(seg=>({...seg, cyIn:actualC}));
+      wingResults = packPocketsAround(Wt, actualH, actualC);
+      const slice = findBindingSlice(actualC, actualH, xs,L,dL,dS,bow);
+      envelope = {r:slice.r, y:slice.y};
+    }
+  }
+
+  const totalCounts = {};
+  const bonusCounts = {};
+  SOFTWOOD_ORDER.forEach(n=>{ totalCounts[n]=0; bonusCounts[n]=0; });
+  wingResults.forEach(z=>{
+    Object.entries(z.primaryCounts||{}).forEach(([k,v])=>totalCounts[k]=(totalCounts[k]||0)+v);
+    Object.entries(z.bonusCounts||{}).forEach(([k,v])=>bonusCounts[k]=(bonusCounts[k]||0)+v);
+  });
+  segments.forEach(seg=>{
+    Object.entries(seg.packed.primaryCounts).forEach(([k,v])=>totalCounts[k]=(totalCounts[k]||0)+v);
+    Object.entries(seg.packed.bonusCounts).forEach(([k,v])=>bonusCounts[k]=(bonusCounts[k]||0)+v);
+  });
+
+  let totalBF = 0, bonusBF = 0;
+  let totalArea = 0;
+  SOFTWOOD_ORDER.forEach(n=>{
+    totalBF += boardFeet(dims[n].w, dims[n].h, L, totalCounts[n]);
+    bonusBF += boardFeet(dims[n].w, dims[n].h, L, bonusCounts[n]);
+    totalArea += dims[n].w * dims[n].h * (totalCounts[n] + bonusCounts[n]);
+  });
+  const beamBF = beamResults.filter(b=>b.fits).reduce((s,b)=>s+boardFeet(b.w,b.h,L,1),0);
+  beamResults.filter(b=>b.fits).forEach(b=>{ totalArea += b.w*b.h; });
+  const logVolume = logVolumeBF(dL,dS,L);
+  const yieldPct = logVolume>0 ? Math.round(100*(totalBF+bonusBF+beamBF)/logVolume) : 0;
+  const smallEndArea = Math.PI*Math.pow(dS/2,2);
+  const areaUtilPct = smallEndArea>0 ? Math.round(100*totalArea/smallEndArea) : 0;
+
+  return {
+    species:'softwood', mode, selectedNames, totalCounts, bonusCounts, totalBF: Math.round(totalBF), bonusBF: Math.round(bonusBF),
+    beamResults, beamBF: Math.round(beamBF), mainCant, segments, wingResults, yieldPct: Math.min(yieldPct,100),
+    areaUtilPct: Math.min(areaUtilPct,100),
+    kerf, dL, dS, L, bow, beamEnvelope: usedBeamEnvelope, envelope
+  };
+}
+
+function sidePocketWidth(innerX, subC, subH, xs, L, dL, dS, bow){
+  let minVal = Infinity;
+  for(const x of xs){
+    const r = taperDia(x,L,dL,dS)/2;
+    const y = bowOffset(x,L,bow);
+    const e = Math.abs(subC-y)+subH/2;
+    if(e>=r) return 0;
+    const halfExtent = Math.sqrt(r*r-e*e);
+    const avail = halfExtent - innerX;
+    if(avail<minVal) minVal=avail;
+  }
+  return Math.max(0, minVal===Infinity?0:minVal);
+}
+
+function searchSidePocket(innerX, xs, L, dL, dS, bow, orderNames, fallbackNames, dims, kerf, percents, vRange, step){
+  let best=null;
+  for(let subH=1; subH<=dL; subH+=step){
+    for(let subC=-vRange; subC<=vRange; subC+=step){
+      const w = sidePocketWidth(innerX,subC,subH,xs,L,dL,dS,bow);
+      if(w<0.3) continue;
+      const packed = packZone(w,subH,orderNames,fallbackNames,dims,percents,kerf,true);
+      const score = scoreArea(packed.primaryCounts,dims) + scoreArea(packed.bonusCounts,dims);
+      const area = w*subH;
+      if(!best || score>best.score || (score===best.score && area>best.area)) best={subC,subH,w,score,area};
+    }
+  }
+  return best;
+}
+
+function verticalPocketHeight(innerY,direction,subW,xs,L,dL,dS,bow){
+  let minVal=Infinity;
+  for(const x of xs){
+    const r=taperDia(x,L,dL,dS)/2;
+    const y=bowOffset(x,L,bow);
+    const rem = r*r-(subW/2)*(subW/2);
+    if(rem<=0) return 0;
+    const halfExtent=Math.sqrt(rem);
+    const avail = direction>0 ? (y+halfExtent-innerY) : (innerY-(y-halfExtent));
+    if(avail<minVal) minVal=avail;
+  }
+  return Math.max(0,minVal===Infinity?0:minVal);
+}
+
+function searchVerticalPocket(innerY,direction,xs,L,dL,dS,bow,orderNames,fallbackNames,dims,kerf,percents,maxW,step){
+  let best=null;
+  for(let subW=0.5; subW<=maxW; subW+=step){
+    const h = verticalPocketHeight(innerY,direction,subW,xs,L,dL,dS,bow);
+    if(h<0.3) continue;
+    const packed = packZone(subW,h,orderNames,fallbackNames,dims,percents,kerf,true);
+    const score = scoreArea(packed.primaryCounts,dims) + scoreArea(packed.bonusCounts,dims);
+    const area = subW*h;
+    if(!best || score>best.score || (score===best.score && area>best.area)) best={subW,h,score,area};
+  }
+  return best;
+}
+
+function runHardwood(){
+  const {largeDia:dL, smallDia:dS, length:L, bow} = state.log;
+  const xs = sampleXs(L,26);
+  const kerf = state.hardwood.kerfOverride ?? state.settings.kerf;
+  const dims = state.settings.dims;
+  const selectedNames = HARDWOOD_ORDER.filter(n=>state.hardwood.selected[n]);
+  const fallbackNames = HARDWOOD_ORDER.filter(n=>!state.hardwood.selected[n]);
+  const percents = state.hardwood.percents;
+  const W = state.hardwood.desiredWidth;
+
+  const empty = {species:'hardwood', fits:false, W, cantH:0, cantC:0, totalCounts:{}, bonusCounts:{},
+    totalBF:0, bonusBF:0, yieldPct:0, areaUtilPct:0, placements:[], dL,dS,L,bow,kerf};
+  if(!selectedNames.length || !(W>0)) return empty;
+
+  const theoCant = findBestCantForWidth(W, xs, L, dL, dS, bow, Math.max(bow*1.5,1), 0.25);
+  if(!theoCant || theoCant.H<0.5) return {...empty, fits:false};
+
+  const orderNames = buildOrder(selectedNames, 'mix', dims, percents);
+  const dimsForPacking = {};
+  [...orderNames, ...fallbackNames].forEach(n=>{ dimsForPacking[n] = {w:W, h:dims[n].h}; });
+
+  const primary = priorityPack(W, theoCant.H, orderNames, dimsForPacking, percents, kerf, true);
+  let bonus = {counts:{}, placements:[]};
+  if(fallbackNames.length){
+    bonus = fallbackFill(W, primary.remH, primary.yCursor, fallbackNames, dimsForPacking, kerf);
+  }
+  const placements = [
+    ...primary.placements.map(p=>({...p,bonus:false})),
+    ...bonus.placements.map(p=>({...p,bonus:true}))
+  ];
+
+  // shrink the cant to the actual used height before evaluating anything downstream —
+  // same fix as softwood: leftover inside the theoretical cant becomes available to
+  // the south pocket and the milling-preference passes instead of being trapped.
+  const usedHeight = placements.reduce((m,p)=>Math.max(m, p.y+p.height), 0);
+  let actualH = usedHeight>0 && usedHeight<=theoCant.H ? usedHeight : theoCant.H;
+  const topEdge = theoCant.c + theoCant.H/2;
+  const actualC = topEdge - actualH/2;
+  const cant = {H:actualH, c:actualC};
+
+  const totalCounts = {}, bonusCounts = {};
+  HARDWOOD_ORDER.forEach(n=>{ totalCounts[n]=primary.counts[n]||0; bonusCounts[n]=bonus.counts[n]||0; });
+
+  // South pocket: search for the best (narrower) width below the shrunk cant, same
+  // thickness-mix logic as the main cant, since width is free here rather than catalog-fixed.
+  let southPocket = null;
+  const southInnerY = cant.c - cant.H/2 - kerf;
+  let southBest = null;
+  for(let subW=2; subW<=W; subW+=0.25){
+    const h = verticalPocketHeight(southInnerY, -1, subW, xs, L, dL, dS, bow);
+    if(h<0.3) continue;
+    const dimsForSouth = {};
+    [...orderNames, ...fallbackNames].forEach(n=>{ dimsForSouth[n] = {w:subW, h:dims[n].h}; });
+    const sp = priorityPack(subW, h, orderNames, dimsForSouth, percents, kerf, true);
+    let sb = {counts:{}, placements:[]};
+    if(fallbackNames.length) sb = fallbackFill(subW, sp.remH, sp.yCursor, fallbackNames, dimsForSouth, kerf);
+    const score = scoreArea(sp.counts,dimsForSouth) + scoreArea(sb.counts,dimsForSouth);
+    if(!southBest || score>southBest.score) southBest = {subW, h, primary:sp, bonus:sb, score};
+  }
+  if(southBest){
+    southPocket = {W:southBest.subW, H:southBest.h, cxIn:0, cyIn:southInnerY-southBest.h/2,
+      primaryCounts:southBest.primary.counts, bonusCounts:southBest.bonus.counts,
+      placements:[
+        ...southBest.primary.placements.map(p=>({...p,bonus:false})),
+        ...southBest.bonus.placements.map(p=>({...p,bonus:true}))
+      ]};
+  }
+
+  let totalBF=0, bonusBF=0, totalArea=0;
+  HARDWOOD_ORDER.forEach(n=>{
+    totalBF += boardFeet(W, dims[n].h, L, primary.counts[n]||0);
+    bonusBF += boardFeet(W, dims[n].h, L, bonus.counts[n]||0);
+    totalArea += W*dims[n].h*((primary.counts[n]||0)+(bonus.counts[n]||0));
+    if(southPocket){
+      const spW = southPocket.W;
+      totalBF += boardFeet(spW, dims[n].h, L, southPocket.primaryCounts[n]||0);
+      bonusBF += boardFeet(spW, dims[n].h, L, southPocket.bonusCounts[n]||0);
+      totalArea += spW*dims[n].h*((southPocket.primaryCounts[n]||0)+(southPocket.bonusCounts[n]||0));
+    }
+  });
+
+  const logVolume = logVolumeBF(dL,dS,L);
+  const smallEndArea = Math.PI*Math.pow(dS/2,2);
+
+  const slice = findBindingSlice(cant.c, cant.H, xs, L, dL, dS, bow);
+  const envelope = {r:slice.r, y:slice.y};
+
+  // Milling preference: after squaring to your desired width, open the top with two passes,
+  // then rotate CCW to take the east wing, then 180deg more for the west wing — each pass
+  // trimmed to its own true maximum, not a fixed size.
+  const customBoards = [];
+  const T = orderNames.length ? dims[orderNames[0]].h : 0;
+  if(T>0){
+    let vCursor = cant.c + cant.H/2 + kerf;
+    for(let i=0; i<2; i++){
+      const vCenter = vCursor + T/2;
+      const width = cantMaxWidth(vCenter, T, xs, L, dL, dS, bow);
+      if(width < 2) break;
+      customBoards.push({side:'top', width, t:T, cxIn:0, cyIn:vCenter});
+      vCursor += T + kerf;
+    }
+    const numSide = Math.max(0, Math.floor((cant.H+kerf)/(T+kerf)));
+    let xCursor = W/2 + kerf;
+    for(let i=0; i<numSide; i++){
+      const xOuter = xCursor + T;
+      const height = cantMaxHeightForWidth(cant.c, 2*xOuter, xs, L, dL, dS, bow);
+      if(height>=2){
+        customBoards.push({side:'east', width:height, t:T, cxIn:xCursor+T/2, cyIn:cant.c});
+        customBoards.push({side:'west', width:height, t:T, cxIn:-(xCursor+T/2), cyIn:cant.c});
+      }
+      xCursor += T + kerf;
+    }
+  }
+  const customBF = customBoards.reduce((s,b)=>s+boardFeet(b.width,b.t,L,1),0);
+  customBoards.forEach(b=>{ totalArea += b.width*b.t; });
+  const areaUtilPct2 = smallEndArea>0 ? Math.round(100*totalArea/smallEndArea) : 0;
+  const yieldPct2 = logVolume>0 ? Math.round(100*(totalBF+bonusBF+customBF)/logVolume) : 0;
+
+  return {species:'hardwood', fits:true, W, cantH:cant.H, cantC:cant.c,
+    totalCounts, bonusCounts, totalBF:Math.round(totalBF), bonusBF:Math.round(bonusBF),
+    customBoards, customBF:Math.round(customBF), southPocket,
+    yieldPct:Math.min(yieldPct2,100), areaUtilPct:Math.min(areaUtilPct2,100),
+    placements, dL,dS,L,bow,kerf, envelope};
+}
+
+function runResults(){
+  const mode = state.resultMode;
+  state.results = state.log.species==='softwood' ? runSoftwood(mode) : runHardwood();
+}
+
+// ---------- UI helpers ----------
+function el(html){ const d=document.createElement('div'); d.innerHTML=html.trim(); return d.firstChild; }
+function fmt(n,dp=2){ return (Math.round(n*Math.pow(10,dp))/Math.pow(10,dp)).toString(); }
+
+function renderTabs(){
+  const tabs = [['settings','Settings'],['log','Log'],['species','Boards'],['results','Results']];
+  const wrap = document.getElementById('tabs');
+  wrap.innerHTML='';
+  tabs.forEach(([id,label])=>{
+    const t = el(`<div class="tab ${state.tab===id?'active':''}">${label}</div>`);
+    t.onclick=()=>{ state.tab=id; if(id==='results') runResults(); renderAll(); };
+    wrap.appendChild(t);
+  });
+}
+
+function renderAll(){
+  renderTabs();
+  const main = document.getElementById('main');
+  main.innerHTML='';
+  if(state.tab==='settings') main.appendChild(renderSettings());
+  if(state.tab==='log') main.appendChild(renderLog());
+  if(state.tab==='species') main.appendChild(renderSpecies());
+  if(state.tab==='results') main.appendChild(renderResults());
+}
+
+// ---------- Settings screen ----------
+function storageAvailable(){
+  try{
+    const k = '__millplan_test__';
+    localStorage.setItem(k,'1'); localStorage.removeItem(k);
+    return true;
+  }catch(e){ return false; }
+}
+
+function saveSettings(){
+  try{ localStorage.setItem('millplan-settings', JSON.stringify(state.settings)); }catch(e){}
+}
+
+function loadSettings(){
+  try{
+    const raw = localStorage.getItem('millplan-settings');
+    if(!raw) return;
+    const parsed = JSON.parse(raw);
+    if(parsed && typeof parsed.kerf==='number') state.settings.kerf = parsed.kerf;
+    if(parsed && parsed.dims){
+      Object.keys(parsed.dims).forEach(k=>{
+        if(state.settings.dims[k]) state.settings.dims[k] = {...state.settings.dims[k], ...parsed.dims[k]};
+      });
+    }
+  }catch(e){}
+}
+
+function renderSettings(){
+  const canSave = storageAvailable();
+  const wrap = el(`<div>
+    <h2>Settings</h2>
+    <p class="sub">Actual dimensions and default kerf. These feed every log's plan unless overridden.</p>
+    <p class="footnote" style="margin-bottom:14px;">${canSave ? 'Changes here save automatically in this browser — reopening the file will remember them.' : "This browser won't let the file save settings (private/incognito mode, or another restriction) — changes will reset next time you open it."}</p>
+    <div class="panel">
+      <label>Default kerf</label>
+      <div class="row"><div class="field"><input type="number" step="0.0625" id="kerf-in" value="${state.settings.kerf}"><span class="unit">in</span></div></div>
+    </div>
+    <div class="panel">
+      <label>Softwood — actual thickness x width (in)</label>
+      <div id="sw-dims"></div>
+    </div>
+    <div class="panel">
+      <label>Hardwood — actual thickness by quarter (in)</label>
+      <div id="hw-dims"></div>
+    </div>
+  </div>`);
+  wrap.querySelector('#kerf-in').oninput = e=>{ state.settings.kerf = parseFloat(e.target.value)||0; saveSettings(); };
+
+  const swDims = wrap.querySelector('#sw-dims');
+  SOFTWOOD_ORDER.forEach(n=>{
+    const d = state.settings.dims[n];
+    const row = el(`<div class="row"><div class="field"><label>${n}</label></div>
+      <div class="field"><input type="number" step="0.0625" value="${d.h}"><span class="unit">h</span></div>
+      <div class="field"><input type="number" step="0.0625" value="${d.w}"><span class="unit">w</span></div>
+    </div>`);
+    const [hIn,wIn] = row.querySelectorAll('input');
+    hIn.oninput=e=>{ d.h=parseFloat(e.target.value)||0; saveSettings(); };
+    wIn.oninput=e=>{ d.w=parseFloat(e.target.value)||0; saveSettings(); };
+    swDims.appendChild(row);
+  });
+
+  const hwDims = wrap.querySelector('#hw-dims');
+  HARDWOOD_ORDER.forEach(n=>{
+    const d = state.settings.dims[n];
+    const row = el(`<div class="row"><div class="field"><label>${n}</label></div>
+      <div class="field"><input type="number" step="0.0625" value="${d.h}"><span class="unit">in thick</span></div>
+    </div>`);
+    row.querySelector('input').oninput=e=>{ d.h=parseFloat(e.target.value)||0; saveSettings(); };
+    hwDims.appendChild(row);
+  });
+
+  return wrap;
+}
+
+// ---------- Log screen ----------
+function renderLog(){
+  const wrap = el(`<div>
+    <h2>Log</h2>
+    <p class="sub">Measurements in inches. Species picks the milling path on the next screen.</p>
+    <div class="panel">
+      <div class="grid2 row">
+        <div class="field"><label>Large diameter</label><input type="number" step="0.25" id="ld" value="${state.log.largeDia}"></div>
+        <div class="field"><label>Small diameter</label><input type="number" step="0.25" id="sd" value="${state.log.smallDia}"></div>
+      </div>
+      <div class="grid2 row">
+        <div class="field"><label>Length</label><input type="number" step="1" id="ln" value="${state.log.length}"></div>
+        <div class="field"><label>Bow</label><input type="number" step="0.125" id="bw" value="${state.log.bow}"></div>
+      </div>
+      <label>Species</label>
+      <div class="seg">
+        <button id="sw-btn" class="${state.log.species==='softwood'?'active':''}">Softwood</button>
+        <button id="hw-btn" class="${state.log.species==='hardwood'?'active':''}">Hardwood</button>
+      </div>
+    </div>
+    <label>Side profile</label>
+    <canvas id="profile" width="800" height="360"></canvas>
+    <p class="footnote">Taper is linear end to end. Bow is modeled as a parabolic sweep, zero at both ends, maximum at midspan — matches how sweep is measured on a log deck.</p>
+  </div>`);
+
+  const inputs = { ld:'largeDia', sd:'smallDia', ln:'length', bw:'bow' };
+  Object.entries(inputs).forEach(([id,key])=>{
+    wrap.querySelector('#'+id).oninput = e=>{ state.log[key]=parseFloat(e.target.value)||0; drawProfile(wrap.querySelector('#profile')); };
+  });
+  wrap.querySelector('#sw-btn').onclick=()=>{ state.log.species='softwood'; renderAll(); };
+  wrap.querySelector('#hw-btn').onclick=()=>{ state.log.species='hardwood'; renderAll(); };
+
+  setTimeout(()=>drawProfile(wrap.querySelector('#profile')),0);
+  return wrap;
+}
+
+function drawProfile(canvas){
+  const ctx = canvas.getContext('2d');
+  const W=canvas.width, H=canvas.height;
+  ctx.clearRect(0,0,W,H);
+  const {largeDia:dL, smallDia:dS, length:L, bow} = state.log;
+  const pad=70;
+  const scaleX = (W-2*pad)/L;
+  const maxDia = Math.max(dL,dS,1);
+  const scaleY = (H-2*pad-40)/maxDia;
+  const midY = H/2;
+
+  ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--line');
+  ctx.lineWidth=1;
+  const nTop=[], nBot=[];
+  const N=60;
+  for(let i=0;i<=N;i++){
+    const x = L*i/N;
+    const r = taperDia(x,L,dL,dS)/2;
+    const y = bowOffset(x,L,bow);
+    const px = pad + x*scaleX;
+    nTop.push([px, midY-(y+r)*scaleY]);
+    nBot.push([px, midY-(y-r)*scaleY]);
+  }
+  ctx.beginPath();
+  nTop.forEach(([x,y],i)=> i===0? ctx.moveTo(x,y):ctx.lineTo(x,y));
+  for(let i=nBot.length-1;i>=0;i--) ctx.lineTo(nBot[i][0],nBot[i][1]);
+  ctx.closePath();
+  ctx.fillStyle = '#d9915022';
+  ctx.fill();
+  ctx.strokeStyle = '#d99150aa';
+  ctx.stroke();
+
+  // pith centerline
+  ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--chalk');
+  ctx.setLineDash([4,4]);
+  ctx.lineWidth=1;
+  ctx.beginPath();
+  for(let i=0;i<=N;i++){
+    const x=L*i/N; const y=bowOffset(x,L,bow);
+    const px=pad+x*scaleX, py=midY-y*scaleY;
+    i===0? ctx.moveTo(px,py):ctx.lineTo(px,py);
+  }
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text-dim');
+  ctx.font='11px IBM Plex Mono';
+  ctx.textAlign='center';
+  ctx.fillText(`length ${fmt(L,0)} in`, W/2, H-24);
+  ctx.textAlign='left';
+  ctx.fillText(`${fmt(dL,1)}" `, pad-4, midY-(dL/2)*scaleY-8);
+  ctx.fillText(`${fmt(dS,1)}" `, W-pad-4, midY-bowOffset(L,L,bow)*scaleY-(dS/2)*scaleY-8);
+  ctx.fillText(`bow ${fmt(bow,2)}"`, W/2-20, midY-bowOffset(L/2,L,bow)*scaleY-10);
+}
+
+// ---------- Species screen ----------
+function renderSpecies(){
+  return state.log.species==='softwood' ? renderSoftwoodOptions() : renderHardwoodOptions();
+}
+
+function renderSoftwoodOptions(){
+  const sw = state.softwood;
+  const wrap = el(`<div>
+    <h2>Softwood mix</h2>
+    <p class="sub">Pick sizes, set a target mix, add beams if needed. Dimensions come from Settings.</p>
+    <div class="panel"><label>Board sizes and mix (%)</label><div id="sw-list"></div></div>
+    <div class="panel">
+      <div class="row" style="justify-content:space-between;align-items:center;">
+        <label style="margin:0;">Beams (max 2)</label>
+        <button class="btn small" id="add-beam" ${sw.beams.length>=2?'disabled':''}>+ Add beam</button>
+      </div>
+      <div id="beam-list"></div>
+      <p class="footnote" style="margin-top:8px;">Boxed heart centers the beam on the pith and maximizes surrounding board yield. Free of heart center offsets the beam so the pith falls outside it — more stable, smaller yield from the remaining wood.</p>
+    </div>
+    <div class="panel">
+      <label>Kerf override for this log</label>
+      <div class="row"><div class="field"><input type="number" step="0.0625" id="kerf-ov" value="${sw.kerfOverride ?? state.settings.kerf}"></div></div>
+    </div>
+  </div>`);
+
+  const list = wrap.querySelector('#sw-list');
+  SOFTWOOD_ORDER.forEach(n=>{
+    const d = state.settings.dims[n];
+    const row = el(`<div class="checkrow">
+      <div style="display:flex;align-items:center;">
+        <div class="chk ${sw.selected[n]?'on':''}"></div>
+        <span class="name" style="margin-left:10px;">${n}</span>
+        <span class="dim">${fmt(d.h,3)}"x${fmt(d.w,3)}"</span>
+      </div>
+      <div class="pct"><input type="number" min="0" max="100" value="${sw.percents[n]||0}"><span class="unit">%</span></div>
+    </div>`);
+    const chk = row.querySelector('.chk');
+    const pctIn = row.querySelector('input');
+    chk.onclick=()=>{ sw.selected[n]=!sw.selected[n]; if(!sw.selected[n]) sw.percents[n]=0; renderAll(); };
+    pctIn.oninput=e=>{ sw.percents[n]=parseFloat(e.target.value)||0; };
+    list.appendChild(row);
+  });
+
+  const beamList = wrap.querySelector('#beam-list');
+  sw.beams.forEach((b,i)=>{
+    const card = el(`<div class="beamcard">
+      <div class="hd"><span class="name">Beam ${i+1}</span><button class="btn small danger">remove</button></div>
+      <div class="grid2 row">
+        <div class="field"><label>Width</label><input type="number" step="0.0625" value="${b.w}"></div>
+        <div class="field"><label>Height</label><input type="number" step="0.0625" value="${b.h}"></div>
+      </div>
+      <div class="seg">
+        <button class="${b.placement==='boxed'?'active':''}" data-p="boxed">Boxed heart</button>
+        <button class="${b.placement==='fohc'?'active':''}" data-p="fohc">Free of heart center</button>
+      </div>
+    </div>`);
+    card.querySelector('.btn.danger').onclick=()=>{ sw.beams.splice(i,1); renderAll(); };
+    const [wIn,hIn] = card.querySelectorAll('input');
+    wIn.oninput=e=>b.w=parseFloat(e.target.value)||0;
+    hIn.oninput=e=>b.h=parseFloat(e.target.value)||0;
+    card.querySelectorAll('[data-p]').forEach(btn=>btn.onclick=()=>{ b.placement=btn.dataset.p; renderAll(); });
+    beamList.appendChild(card);
+  });
+
+  wrap.querySelector('#add-beam').onclick=()=>{
+    if(sw.beams.length<2){ sw.beams.push({w:8,h:4,placement:'boxed'}); renderAll(); }
+  };
+  wrap.querySelector('#kerf-ov').oninput=e=>{ sw.kerfOverride=parseFloat(e.target.value)||0; };
+
+  return wrap;
+}
+
+function renderHardwoodOptions(){
+  const hw = state.hardwood;
+  const wrap = el(`<div>
+    <h2>Hardwood mix</h2>
+    <p class="sub">Set the width you're squaring the log down to (flooring width, jointer capacity, whatever you're after), then the thickness mix to resaw it into.</p>
+    <div class="panel">
+      <label>Desired board width</label>
+      <div class="row"><div class="field"><input type="number" step="0.125" id="hw-width" value="${hw.desiredWidth}"><span class="unit">in</span></div></div>
+      <p class="footnote" style="margin-top:8px;">This is the width you square the log to by opening it, rotating, and taking a straight-edge board each turn — same idea as the softwood cant, just one width instead of a sum of catalog sizes.</p>
+    </div>
+    <div class="panel"><label>Thickness classes and mix (%)</label><div id="hw-list"></div></div>
+    <div class="panel">
+      <label>Kerf override for this log</label>
+      <div class="row"><div class="field"><input type="number" step="0.0625" id="kerf-ov" value="${hw.kerfOverride ?? state.settings.kerf}"></div></div>
+    </div>
+  </div>`);
+
+  wrap.querySelector('#hw-width').oninput=e=>{ hw.desiredWidth=parseFloat(e.target.value)||0; };
+
+  const list = wrap.querySelector('#hw-list');
+  HARDWOOD_ORDER.forEach(n=>{
+    const d = state.settings.dims[n];
+    const row = el(`<div class="checkrow">
+      <div style="display:flex;align-items:center;">
+        <div class="chk ${hw.selected[n]?'on':''}"></div>
+        <span class="name" style="margin-left:10px;">${n}</span>
+        <span class="dim">${fmt(d.h,3)}" thick</span>
+      </div>
+      <div class="pct"><input type="number" min="0" max="100" value="${hw.percents[n]||0}"><span class="unit">%</span></div>
+    </div>`);
+    const chk = row.querySelector('.chk');
+    const pctIn = row.querySelector('input');
+    chk.onclick=()=>{ hw.selected[n]=!hw.selected[n]; if(!hw.selected[n]) hw.percents[n]=0; renderAll(); };
+    pctIn.oninput=e=>{ hw.percents[n]=parseFloat(e.target.value)||0; };
+    list.appendChild(row);
+  });
+  wrap.querySelector('#kerf-ov').oninput=e=>{ hw.kerfOverride=parseFloat(e.target.value)||0; };
+
+  return wrap;
+}
+
+// ---------- Results screen ----------
+function renderResults(){
+  if(!state.results) runResults();
+  const r = state.results;
+  const wrap = el(`<div>
+    <h2>Cutting plan</h2>
+    <p class="sub">${state.log.species==='softwood'?'Softwood — dimensional lumber':'Hardwood — '+fmt(state.hardwood.desiredWidth,2)+'" desired width'} <span style="color:var(--text-dim);">· ${state.log.species==='softwood'?SOFTWOOD_VERSION:HARDWOOD_VERSION}</span></p>
+    ${state.log.species==='softwood' ? `<div class="rangebtn">
+      <button class="btn ${state.resultMode==='max'?'primary':''}" id="mode-max">Max yield</button>
+      <button class="btn ${state.resultMode==='mix'?'primary':''}" id="mode-mix">Your mix</button>
+    </div>` : ''}
+    <label>Board layout</label>
+    <canvas id="xsec" width="800" height="620"></canvas>
+    <div id="legend" style="display:flex;flex-wrap:wrap;gap:10px 16px;margin:10px 0 4px;"></div>
+    <div class="statgrid" style="margin-top:10px;">
+      <div class="stat"><div class="label">Yield</div><div class="val">${r.yieldPct}%</div></div>
+      <div class="stat"><div class="label">Board feet</div><div class="val">${r.totalBF + (r.bonusBF||0) + (r.beamBF||0) + (r.customBF||0)}</div></div>
+    </div>
+    <div class="stat" style="margin-bottom:14px;"><div class="label">Small-end area used</div><div class="val">${r.areaUtilPct}%</div></div>
+    <p class="sub" style="margin:2px 0 0;">${r.bonusBF>0 ? `Includes ${r.bonusBF} bf recovered from leftover space in sizes you didn't select.` : ''}</p>
+    <div id="warnings"></div>
+    <div id="cutlist"></div>
+  </div>`);
+
+  if(state.log.species==='softwood'){
+    wrap.querySelector('#mode-max').onclick=()=>{ state.resultMode='max'; runResults(); renderAll(); };
+    wrap.querySelector('#mode-mix').onclick=()=>{ state.resultMode='mix'; runResults(); renderAll(); };
+  }
+
+  const warn = wrap.querySelector('#warnings');
+  if(r.species==='softwood'){
+    r.beamResults.forEach((b,i)=>{
+      if(!b.fits) warn.appendChild(el(`<div class="warn">Beam ${i+1} (${fmt(b.w,3)}"x${fmt(b.h,3)}", ${b.placement==='boxed'?'boxed heart':'free of heart center'}) does not fit this log — reduce beam size or increase log diameter.</div>`));
+    });
+  }
+
+  const legend = wrap.querySelector('#legend');
+  if(r.species==='softwood'){
+    if(r.beamResults.some(b=>b.fits)) legend.appendChild(el(`<div style="display:flex;align-items:center;gap:6px;font-family:'IBM Plex Mono',monospace;font-size:14px;"><span style="width:14px;height:14px;background:#d99150;display:inline-block;border-radius:2px;"></span>Beam</div>`));
+    SOFTWOOD_ORDER.forEach(n=>{
+      if(r.totalCounts[n]>0) legend.appendChild(el(`<div style="display:flex;align-items:center;gap:6px;font-family:'IBM Plex Mono',monospace;font-size:14px;"><span style="width:14px;height:14px;background:${paletteColor(n,SOFTWOOD_ORDER)};display:inline-block;border-radius:2px;"></span>${n}</div>`));
+    });
+    SOFTWOOD_ORDER.forEach(n=>{
+      if(r.bonusCounts[n]>0) legend.appendChild(el(`<div style="display:flex;align-items:center;gap:6px;font-family:'IBM Plex Mono',monospace;font-size:14px;"><span style="width:14px;height:14px;background:${paletteColor(n,SOFTWOOD_ORDER)}; border:1px dashed var(--text); display:inline-block;border-radius:2px;"></span>${n} (extra)</div>`));
+    });
+  } else {
+    HARDWOOD_ORDER.forEach(n=>{
+      if(r.totalCounts[n]>0) legend.appendChild(el(`<div style="display:flex;align-items:center;gap:6px;font-family:'IBM Plex Mono',monospace;font-size:14px;"><span style="width:14px;height:14px;background:${paletteColor(n,HARDWOOD_ORDER)};display:inline-block;border-radius:2px;"></span>${n}</div>`));
+    });
+    HARDWOOD_ORDER.forEach(n=>{
+      if(r.bonusCounts[n]>0) legend.appendChild(el(`<div style="display:flex;align-items:center;gap:6px;font-family:'IBM Plex Mono',monospace;font-size:14px;"><span style="width:14px;height:14px;background:${paletteColor(n,HARDWOOD_ORDER)}; border:1px dashed var(--text); display:inline-block;border-radius:2px;"></span>${n} (extra)</div>`));
+    });
+    if(r.customBoards && r.customBoards.length) legend.appendChild(el(`<div style="display:flex;align-items:center;gap:6px;font-family:'IBM Plex Mono',monospace;font-size:14px;"><span style="width:14px;height:14px;background:#6bb1b8;display:inline-block;border-radius:2px;"></span>Max-width pass</div>`));
+  }
+
+  const cutlist = wrap.querySelector('#cutlist');
+  if(r.species==='softwood'){
+    const table = document.createElement('table');
+    let rowsHtml = '<tr><th>Piece</th><th>Length</th><th>Qty</th></tr>';
+    r.beamResults.filter(b=>b.fits).forEach(b=>{
+      rowsHtml += `<tr><td>Beam ${fmt(b.w,3)}"x${fmt(b.h,3)}"</td><td>${fmt(r.L/12,1)} ft</td><td>1</td></tr>`;
+    });
+    Object.entries(r.totalCounts).forEach(([name,count])=>{
+      if(count>0) rowsHtml += `<tr><td>${name}</td><td>${fmt(r.L/12,1)} ft</td><td>${Math.round(count)}</td></tr>`;
+    });
+    table.innerHTML = rowsHtml;
+    cutlist.appendChild(table);
+
+    const hasBonus = Object.values(r.bonusCounts).some(v=>v>0);
+    if(hasBonus){
+      cutlist.appendChild(el(`<label style="margin-top:16px;display:block;">Additional recoverable (not in your mix)</label>`));
+      const bt = document.createElement('table');
+      let bRows = '<tr><th>Piece</th><th>Length</th><th>Qty</th></tr>';
+      Object.entries(r.bonusCounts).forEach(([name,count])=>{
+        if(count>0) bRows += `<tr><td>${name}</td><td>${fmt(r.L/12,1)} ft</td><td>${Math.round(count)}</td></tr>`;
+      });
+      bt.innerHTML = bRows;
+      cutlist.appendChild(bt);
+    }
+
+    const cantRows = [];
+    if(r.mainCant) cantRows.push({name:'Main cant', w:r.mainCant.W, h:r.mainCant.H});
+    else if(r.beamEnvelope) cantRows.push({name:'Main cant (beam)', w:r.beamEnvelope.Wb, h:r.beamEnvelope.Hb});
+    const cantNameMap = {top:'North cant', right:'East cant', bottom:'South cant', left:'West cant'};
+    ['top','right','bottom','left'].forEach(key=>{
+      const z = (r.wingResults||[]).find(zn=>zn.name===key);
+      if(z && z.W>=0.3 && z.H>=0.3) cantRows.push({name:cantNameMap[key], w:z.W, h:z.H});
+    });
+    if(cantRows.length){
+      cutlist.appendChild(el(`<label style="margin-top:16px;display:block;">Cant sizes</label>`));
+      const ct = document.createElement('table');
+      let cRows = '<tr><th>Cant</th><th>Width</th><th>Height</th></tr>';
+      cantRows.forEach(cr=>{
+        cRows += `<tr><td>${cr.name}</td><td>${fmt(cr.w,2)}"</td><td>${fmt(cr.h,2)}"</td></tr>`;
+      });
+      ct.innerHTML = cRows;
+      cutlist.appendChild(ct);
+    }
+  } else {
+    if(!r.fits){
+      warn.appendChild(el(`<div class="warn">A ${fmt(r.W,2)}" wide cant doesn't fit this log at all — reduce the desired board width or check the log dimensions.</div>`));
+    }
+    const table = document.createElement('table');
+    let rowsHtml = '<tr><th>Thickness</th><th>Width</th><th>Qty</th></tr>';
+    HARDWOOD_ORDER.forEach(n=>{
+      if(r.totalCounts[n]>0) rowsHtml += `<tr><td>${n}</td><td>${fmt(r.W,2)}"</td><td>${r.totalCounts[n]}</td></tr>`;
+    });
+    table.innerHTML = rowsHtml;
+    cutlist.appendChild(table);
+
+    const hwHasBonus = Object.values(r.bonusCounts).some(v=>v>0);
+    if(hwHasBonus){
+      cutlist.appendChild(el(`<label style="margin-top:16px;display:block;">Additional recoverable (not in your mix)</label>`));
+      const bt = document.createElement('table');
+      let bRows = '<tr><th>Thickness</th><th>Width</th><th>Qty</th></tr>';
+      HARDWOOD_ORDER.forEach(n=>{
+        if(r.bonusCounts[n]>0) bRows += `<tr><td>${n}</td><td>${fmt(r.W,2)}"</td><td>${r.bonusCounts[n]}</td></tr>`;
+      });
+      bt.innerHTML = bRows;
+      cutlist.appendChild(bt);
+    }
+
+    if(r.southPocket && (Object.values(r.southPocket.primaryCounts).some(v=>v>0) || Object.values(r.southPocket.bonusCounts).some(v=>v>0))){
+      cutlist.appendChild(el(`<label style="margin-top:16px;display:block;">South cant — ${fmt(r.southPocket.W,2)}" wide</label>`));
+      const st = document.createElement('table');
+      let sRows = '<tr><th>Thickness</th><th>Width</th><th>Qty</th></tr>';
+      HARDWOOD_ORDER.forEach(n=>{
+        if(r.southPocket.primaryCounts[n]>0) sRows += `<tr><td>${n}</td><td>${fmt(r.southPocket.W,2)}"</td><td>${r.southPocket.primaryCounts[n]}</td></tr>`;
+      });
+      HARDWOOD_ORDER.forEach(n=>{
+        if(r.southPocket.bonusCounts[n]>0) sRows += `<tr><td>${n} (extra)</td><td>${fmt(r.southPocket.W,2)}"</td><td>${r.southPocket.bonusCounts[n]}</td></tr>`;
+      });
+      st.innerHTML = sRows;
+      cutlist.appendChild(st);
+    }
+
+    if(r.customBoards && r.customBoards.length){
+      cutlist.appendChild(el(`<label style="margin-top:16px;display:block;">Milling preference — max-width passes</label>`));
+      const mt = document.createElement('table');
+      const sideNameMap = {top:'Top', east:'East', west:'West'};
+      let mRows = '<tr><th>Pass</th><th>Width x Thick</th><th>Length</th></tr>';
+      r.customBoards.forEach(b=>{
+        mRows += `<tr><td>${sideNameMap[b.side]}</td><td>${fmt(b.width,2)}"x${fmt(b.t,3)}"</td><td>${fmt(r.L/12,1)} ft</td></tr>`;
+      });
+      mt.innerHTML = mRows;
+      cutlist.appendChild(mt);
+      cutlist.appendChild(el(`<p class="footnote" style="margin-top:6px;">Live edge trimmed, each pass left at its true maximum width — trim further to your desired width whenever you're ready. Top: fixed 2 passes. East/west: pass count derived from the cant's own height, following your open-cut / rotate CCW / rotate 180 sequence.</p>`));
+    }
+
+    if(r.fits){
+      cutlist.appendChild(el(`<label style="margin-top:16px;display:block;">Cant size</label>`));
+      const ct = document.createElement('table');
+      let ctRows = `<tr><th>Cant</th><th>Width</th><th>Height</th></tr><tr><td>Main cant</td><td>${fmt(r.W,2)}"</td><td>${fmt(r.cantH,2)}"</td></tr>`;
+      if(r.southPocket && r.southPocket.W>=0.3 && r.southPocket.H>=0.3){
+        ctRows += `<tr><td>South cant</td><td>${fmt(r.southPocket.W,2)}"</td><td>${fmt(r.southPocket.H,2)}"</td></tr>`;
+      }
+      ct.innerHTML = ctRows;
+      cutlist.appendChild(ct);
+    }
+  }
+
+  const foot = el(`<p class="footnote">${r.species==='softwood' ?
+    `Prototype notes: fixed full-length boards only, straight sawing (no sweep-following). Cant width is the sum of your selected board widths plus kerf; height is the max the log allows for that width. Wing pockets (top/bottom/left/right) are searched independently for their own best size and position. Boards are tried both flat and on-edge (rotated) per pocket, whichever fits. The dashed line marks the cant and pocket boundaries; solid colored pieces are your requested mix; dash-bordered pieces are extra sizes recovered from leftover space.` :
+    `Prototype notes: fixed full-length boards only, straight sawing (no sweep-following). Cant width is your desired board width; height is the max the log allows for that width, resawn by thickness. Top/east/west max-width passes follow your rotate-and-square process, trimmed to the true geometric maximum rather than a fixed size — south is not yet recovered.`}
+    Board layout shown at one representative cross-section — every board runs the log's full length. All figures rounded to whole numbers.</p>`);
+  wrap.appendChild(foot);
+
+  setTimeout(()=>drawCrossSection(wrap.querySelector('#xsec'), r),0);
+  return wrap;
+}
+
+const PALETTE = ['#d99150','#7fb88a','#8fb8c9','#e2664a','#c9a94f','#a084c4','#6bb1b8','#d97fa0','#9fcf6b','#e0b04f','#6f9bd9'];
+function paletteColor(name, order){ const idx = order.indexOf(name); return PALETTE[(idx>=0?idx:0) % PALETTE.length]; }
+
+function drawCrossSection(canvas, r){
+  const ctx = canvas.getContext('2d');
+  const W=canvas.width,H=canvas.height;
+  ctx.clearRect(0,0,W,H);
+  const cx=W/2, cy=H/2;
+  const env = r.envelope || {r:r.dS/2, y:0};
+  const dia = env.r*2;
+  const scale = Math.min(W,H)*0.4 / (dia/2);
+  const R = (dia/2)*scale;
+  const circleCy = cy - env.y*scale;
+
+  ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--line');
+  ctx.lineWidth=1;
+  ctx.beginPath(); ctx.arc(cx,circleCy,R,0,Math.PI*2); ctx.stroke();
+  ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--line-dim');
+  ctx.setLineDash([3,4]);
+  ctx.beginPath(); ctx.moveTo(cx-R-10,circleCy); ctx.lineTo(cx+R+10,circleCy); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx,circleCy-R-10); ctx.lineTo(cx,circleCy+R+10); ctx.stroke();
+  ctx.setLineDash([]);
+
+  function rect(wIn,hIn,cxIn,cyIn,color,label,labelColor){
+    const w=wIn*scale, h=hIn*scale;
+    const x=cx+cxIn*scale-w/2, y=cy-cyIn*scale-h/2;
+    ctx.fillStyle=color+'55'; ctx.fillRect(x,y,w,h);
+    ctx.strokeStyle=color; ctx.lineWidth=1; ctx.strokeRect(x,y,w,h);
+    if(label && w>60 && h>26){
+      ctx.fillStyle=labelColor || getComputedStyle(document.documentElement).getPropertyValue('--text');
+      ctx.font='bold 20px IBM Plex Mono'; ctx.textAlign='center';
+      ctx.fillText(label, x+w/2, y+h/2+7);
+    }
+  }
+
+  function rectPlacement(p,color){
+    const w=p.width*scale, h=p.height*scale;
+    const x=p._cx*scale+cx-w/2, y=cy-p._cy*scale-h/2;
+    ctx.fillStyle=color+'55'; ctx.fillRect(x,y,w,h);
+    ctx.strokeStyle=color; ctx.lineWidth=1;
+    if(p.bonus) ctx.setLineDash([2,2]); else ctx.setLineDash([]);
+    ctx.strokeRect(x,y,w,h);
+    ctx.setLineDash([]);
+    if(w>50 && h>24){
+      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text');
+      ctx.font='bold 18px IBM Plex Mono'; ctx.textAlign='center';
+      const lbl = p.rotated ? p.name+'\u21bb' : p.name;
+      ctx.fillText(lbl, x+w/2, y+h/2+6);
+    }
+  }
+
+  function dashedOutline(zoneCxIn, zoneCyIn, zoneW, zoneH){
+    if(zoneW<=0||zoneH<=0) return;
+    const w=zoneW*scale, h=zoneH*scale;
+    const x=cx+zoneCxIn*scale-w/2, y=cy-zoneCyIn*scale-h/2;
+    ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--chalk');
+    ctx.setLineDash([5,4]); ctx.lineWidth=1;
+    ctx.strokeRect(x,y,w,h);
+    ctx.setLineDash([]);
+  }
+
+  function drawZone(zoneCxIn, zoneCyIn, zoneW, zoneH, placements, order){
+    dashedOutline(zoneCxIn, zoneCyIn, zoneW, zoneH);
+    const zoneLeft = zoneCxIn - zoneW/2;
+    const zoneTop = zoneCyIn + zoneH/2;
+    placements.forEach(p=>{
+      p._cx = zoneLeft + p.x + p.width/2;
+      p._cy = zoneTop - p.y - p.height/2;
+      rectPlacement(p, paletteColor(p.name, order));
+    });
+  }
+
+  if(r.species==='softwood'){
+    const fittingBeams = r.beamResults.filter(b=>b.fits);
+    if(fittingBeams.length===2){
+      const kerf = r.kerf;
+      const totalW = fittingBeams[0].w + fittingBeams[1].w + kerf;
+      let runningX = -totalW/2;
+      fittingBeams.forEach(b=>{
+        const cxPos = runningX + b.w/2;
+        rect(b.w,b.h,cxPos,b.c,'#d99150',`${fmt(b.w,2)}x${fmt(b.h,2)}`,'#1a1006');
+        runningX += b.w + kerf;
+      });
+    } else {
+      fittingBeams.forEach(b=>{
+        rect(b.w,b.h,0,b.c,'#d99150',`${fmt(b.w,2)}x${fmt(b.h,2)}`,'#1a1006');
+      });
+    }
+    r.wingResults.forEach(z=>{
+      if(z.W<0.3||z.H<0.3) return;
+      drawZone(z.cxIn, z.cyIn, z.W, z.H, z.placements, SOFTWOOD_ORDER);
+    });
+    if(r.segments && r.segments.length){
+      if(r.mainCant) dashedOutline(0, r.mainCant.c, r.mainCant.W, r.mainCant.H);
+      r.segments.forEach(seg=>{
+        drawZone(seg.cxIn, seg.cyIn, seg.width, r.mainCant.H, seg.packed.placements, SOFTWOOD_ORDER);
+      });
+    }
+  } else {
+    if(r.fits){
+      drawZone(0, r.cantC, r.W, r.cantH, r.placements, HARDWOOD_ORDER);
+    }
+    if(r.southPocket){
+      drawZone(r.southPocket.cxIn, r.southPocket.cyIn, r.southPocket.W, r.southPocket.H, r.southPocket.placements, HARDWOOD_ORDER);
+    }
+    function customBoardLabel(b){
+      const dims = state.settings.dims;
+      const order = r.species==='hardwood' ? HARDWOOD_ORDER : SOFTWOOD_ORDER;
+      for(const n of order){
+        if(Math.abs(dims[n].h - b.t) < 0.01) return n;
+      }
+      return `${fmt(b.width,1)}x${fmt(b.t,2)}`;
+    }
+    (r.customBoards||[]).forEach(b=>{
+      const wIn = b.side==='top' ? b.width : b.t;
+      const hIn = b.side==='top' ? b.t : b.width;
+      const w=wIn*scale, h=hIn*scale;
+      const x=cx+b.cxIn*scale-w/2, y=cy-b.cyIn*scale-h/2;
+      ctx.strokeStyle = '#6bb1b8'; ctx.lineWidth=1.5;
+      ctx.strokeRect(x,y,w,h);
+      const label = customBoardLabel(b);
+      if(b.side==='top'){
+        if(w>18 && h>18){
+          ctx.fillStyle = '#6bb1b8';
+          ctx.font='bold 12px IBM Plex Mono'; ctx.textAlign='center';
+          ctx.fillText(label, x+w/2, y+h/2+4);
+        }
+      } else {
+        if(w>18 && h>28){
+          ctx.save();
+          ctx.translate(x+w/2, y+h/2);
+          ctx.rotate(-Math.PI/2);
+          ctx.fillStyle = '#6bb1b8';
+          ctx.font='bold 18px IBM Plex Mono'; ctx.textAlign='center';
+          ctx.fillText(label, 0, 6);
+          ctx.restore();
+        }
+      }
+    });
+  }
+
+  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text-dim');
+  ctx.font='14px IBM Plex Mono'; ctx.textAlign='center';
+  ctx.fillText(`shown at the log's tightest cross-section (${fmt(dia,1)}" dia) along its length`, cx, H-14);
+}
+
+// Build the web app manifest at runtime (avoids needing a second manifest.json file)
+const manifest = {
+  name: 'Millplan Web',
+  short_name: 'Millplan',
+  start_url: './',
+  display: 'standalone',
+  background_color: '#101d27',
+  theme_color: '#101d27'
+};
+document.getElementById('manifest-link').href = URL.createObjectURL(new Blob([JSON.stringify(manifest)], {type:'application/json'}));
+
+// Register the service worker for offline caching. Safe to fail silently if unsupported.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(()=>{});
+  });
+}
+
+document.getElementById('eyebrow').textContent = `Sawmill planner — ${APP_VERSION}`;
+loadSettings();
+renderAll();
+</script>
+</body>
+</html>
