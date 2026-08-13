@@ -1,10 +1,10 @@
-const CACHE_NAME = 'millplan-web-v1';
-const CORE_URL = './index.html';
+const CACHE_NAME = 'millplan-web-v2';
+const CORE_URLS = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then((cache) => cache.addAll([CORE_URL]))
+      .then((cache) => cache.addAll(CORE_URLS))
       .catch(() => {})
   );
   self.skipWaiting();

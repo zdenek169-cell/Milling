@@ -7,8 +7,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Millplan Web">
-<meta name="theme-color" content="#101d27">
-<link rel="manifest" id="manifest-link">
+<meta name="theme-color" content="#0c161e">
+<link rel="manifest" href="./manifest.json">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders:wght@500;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -16,14 +16,21 @@
   --bg:#0c161e; --panel:#16283499; --panel2:#1c3140; --line:#6f9db3; --line-dim:#3c5a6b;
   --chalk:#eef8fb; --amber:#e8a35f; --amber-dim:#a97a48; --text:#f5f9fa; --text-dim:#b6cad3;
   --red:#ff7a5c; --green:#8fd39c; --radius:2px;
+  --grid:#ffffff05; --halo:#0a1319; --slice-fill:rgba(238,248,251,0.07);
+}
+:root[data-theme="light"]{
+  --bg:#f4efe6; --panel:#ffffffaa; --panel2:#e9e1d2; --line:#8c7a63; --line-dim:#cfc4b0;
+  --chalk:#1c3140; --amber:#b06f2e; --amber-dim:#caa06a; --text:#26333d; --text-dim:#63707a;
+  --red:#bb3f28; --green:#2f7a42;
+  --grid:#00000008; --halo:#f8f4ec; --slice-fill:rgba(28,49,64,0.08);
 }
 *{box-sizing:border-box;}
 body{margin:0;background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased;}
 .app{max-width:460px;margin:0 auto;min-height:100vh;background:
-  repeating-linear-gradient(0deg,transparent,transparent 27px,#ffffff05 28px),
-  repeating-linear-gradient(90deg,transparent,transparent 27px,#ffffff05 28px),
+  repeating-linear-gradient(0deg,transparent,transparent 27px,var(--grid) 28px),
+  repeating-linear-gradient(90deg,transparent,transparent 27px,var(--grid) 28px),
   var(--bg);border-left:0.5px solid var(--line-dim);border-right:0.5px solid var(--line-dim);}
-header{padding:20px 18px 14px;border-bottom:0.5px solid var(--line);}
+header{padding:20px 18px 14px;border-bottom:0.5px solid var(--line);position:relative;}
 .eyebrow{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.14em;color:var(--amber);text-transform:uppercase;}
 h1{font-family:'Big Shoulders',sans-serif;font-weight:700;font-size:32px;letter-spacing:.01em;margin:2px 0 0;text-transform:uppercase;}
 .tabs{display:flex;border-bottom:0.5px solid var(--line);overflow-x:auto;}
@@ -73,6 +80,17 @@ table th{text-align:left;font-size:13px;letter-spacing:.06em;color:var(--text-di
 table td{padding:8px 0;border-bottom:0.5px solid var(--line-dim);}
 table td:last-child,table th:last-child{text-align:right;}
 .footnote{font-size:11px;color:var(--text-dim);line-height:1.6;margin-top:14px;}
+details.help{border:0.5px solid var(--line-dim);border-radius:var(--radius);margin-top:18px;}
+details.help>summary{cursor:pointer;list-style:none;padding:10px 12px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.06em;color:var(--text-dim);text-transform:uppercase;}
+details.help>summary::-webkit-details-marker{display:none;}
+details.help>summary::after{content:'+';float:right;color:var(--amber);}
+details.help[open]>summary::after{content:'\2212';}
+details.help .body{padding:0 12px 12px;font-size:11px;color:var(--text-dim);line-height:1.65;}
+details.help .body h4{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--text);margin:12px 0 4px;font-weight:500;}
+details.help .body h4:first-child{margin-top:0;}
+details.help .body p{margin:0;}
+.chip{display:flex;align-items:center;gap:6px;font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text-dim);}
+.chip i{width:14px;height:3px;border-radius:2px;display:inline-block;}
 .rangebtn{display:flex;gap:8px;margin-bottom:16px;}
 .rangebtn button{flex:1;}
 </style>
@@ -80,23 +98,15 @@ table td:last-child,table th:last-child{text-align:right;}
 <body>
 <div class="app">
   <header>
-    <div class="eyebrow" id="eyebrow">Sawmill planner — prototype v1</div>
+    <div class="eyebrow">Sawmill planner</div>
     <h1>Millplan Web</h1>
+    <button class="btn small" id="theme-toggle" style="position:absolute;top:20px;right:18px;">&#9788; light</button>
   </header>
   <div class="tabs" id="tabs"></div>
   <main id="main"></main>
 </div>
 <script>
 // ---------- state ----------
-// ---------- version tracking ----------
-// Bump APP_VERSION on any deploy. Bump SOFTWOOD_VERSION / HARDWOOD_VERSION only when
-// that specific engine's logic changes, so you can tell at a glance which plan you're
-// looking at came from which version of the math. Softwood is locked as of sw-3 —
-// changes from here on should only touch hardwood unless you say otherwise.
-const APP_VERSION = 'v13';
-const SOFTWOOD_VERSION = 'sw-5';
-const HARDWOOD_VERSION = 'hw-8';
-
 // Rough starting $/board-foot estimates for softwood, seeded from general SPF/timber market
 // ranges (framing lumber ~$0.7-1.1/bf, 1x appearance boards run a bit higher per bf, and
 // squared timbers/beams command a premium). These are deliberately editable in Settings —
@@ -497,7 +507,7 @@ function logVolumeBF(dL,dS,L){
   return (Math.PI*L/3)*(R1*R1+R1*R2+R2*R2)/144;
 }
 
-// ---- Softwood wing growth (sw-4): course-by-course, closest-to-center-first, using only
+// ---- Softwood wing growth: course-by-course, closest-to-center-first, using only
 // preselected catalog widths — replaces the old independent-rectangle pocket search to match
 // the user's real process of squaring off the next board in each direction and stepping down
 // in size as the log narrows, instead of pre-solving one big secondary "cant" per side.
@@ -947,7 +957,7 @@ function renderSettings(){
   const wrap = el(`<div>
     <h2>Settings</h2>
     <p class="sub">Actual dimensions and default kerf. These feed every log's plan unless overridden.</p>
-    <p class="footnote" style="margin-bottom:14px;">${canSave ? 'Changes here save automatically in this browser — reopening the file will remember them.' : "This browser won't let the file save settings (private/incognito mode, or another restriction) — changes will reset next time you open it."}</p>
+    ${canSave ? '' : '<p class="warn" style="margin-bottom:14px;">This browser will not save settings (private browsing, or another restriction). Changes will reset when the app is reopened.</p>'}
     <div class="panel">
       <label>Default kerf</label>
       <div class="row"><div class="field"><input type="number" step="0.0625" id="kerf-in" value="${state.settings.kerf}"><span class="unit">in</span></div></div>
@@ -955,13 +965,22 @@ function renderSettings(){
     <div class="panel">
       <label>Softwood — actual thickness x width (in), and value</label>
       <div id="sw-dims"></div>
-      <p class="footnote" style="margin-top:8px;">$/bf values are rough starting estimates (general SPF/timber market ranges as of mid-2026) — edit them for your species, grade, and local market. They drive the "Max Yield" ranking (total dollar value, not raw board count, decides the winning combination) and the value column/log total on the Results screen.</p>
     </div>
     <div class="panel">
       <label>Hardwood — actual thickness by quarter (in), and value</label>
       <div id="hw-dims"></div>
-      <p class="footnote" style="margin-top:8px;">$/bf values are rough starting estimates — edit for your species, grade, and market. Used to compute the value column and log total on the Results screen.</p>
     </div>
+    <details class="help">
+      <summary>About these settings</summary>
+      <div class="body">
+        <h4>Dimensions</h4>
+        <p>Enter the sizes your mill actually cuts, not nominal sizes. Every plan is built from these figures.</p>
+        <h4>Value</h4>
+        <p>The $/bf figures are rough starting estimates and should be corrected for your species, grade and local market. They produce the value column and log total on the Results screen, and decide the winning combination in Max yield, which ranks on total value rather than board count.</p>
+        <h4>Storage</h4>
+        <p>Changes save automatically on this device${canSave ? '' : ', but this browser is currently blocking that'}. Nothing is sent anywhere.</p>
+      </div>
+    </details>
   </div>`);
   wrap.querySelector('#kerf-in').oninput = e=>{ state.settings.kerf = parseFloat(e.target.value)||0; saveSettings(); };
 
@@ -1022,7 +1041,17 @@ function renderLog(){
     </div>
     <label>Side profile</label>
     <canvas id="profile" width="800" height="360"></canvas>
-    <p class="footnote">Taper is linear end to end. Bow is zero at both ends and peaks at the position you set — leave it at 50% for a centered sweep, or move it toward either end for a log with an off-center hump. The dot on the centerline marks the apex. These measurements are remembered in this browser, so reopening the app starts from your last log.</p>
+    <details class="help">
+      <summary>About these measurements</summary>
+      <div class="body">
+        <h4>Taper</h4>
+        <p>Diameter is taken to run evenly from the large end to the small end.</p>
+        <h4>Bow</h4>
+        <p>Bow is the greatest deviation of the log's centre from straight. It is zero at both ends and greatest at the peak position: leave that at 50% for an evenly curved log, or move it toward either end when the hump sits off centre. The dot on the centreline marks the apex.</p>
+        <h4>Storage</h4>
+        <p>These measurements are kept on this device, so the app reopens on the last log entered.</p>
+      </div>
+    </details>
   </div>`);
 
   const inputs = { ld:'largeDia', sd:'smallDia', ln:'length', bw:'bow', bp:'bowPeak' };
@@ -1066,7 +1095,7 @@ function drawProfile(canvas){
   ctx.closePath();
   ctx.fillStyle = '#d9915055';
   ctx.fill();
-  ctx.strokeStyle = '#e8a35f';
+  ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--amber');
   ctx.lineWidth=2.5;
   ctx.stroke();
 
@@ -1084,7 +1113,9 @@ function drawProfile(canvas){
   ctx.setLineDash([]);
 
   function lbl(text,x,y){
-    ctx.lineWidth=3; ctx.strokeStyle='#0a1319'; ctx.strokeText(text,x,y);
+    ctx.lineWidth=3;
+    ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--halo');
+    ctx.strokeText(text,x,y);
     ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text');
     ctx.fillText(text,x,y);
   }
@@ -1111,9 +1142,15 @@ function renderSoftwoodOptions(){
   const wrap = el(`<div>
     <h2>Softwood mix</h2>
     <p class="sub">Pick sizes, set a target mix, add beams if needed. Dimensions come from Settings.</p>
-    <div class="panel"><label>Board sizes and mix (%)</label><div id="sw-list"></div>
-      <p class="footnote" style="margin-top:8px;">% only balances sizes that share the exact same actual width (e.g. 1x6 and 2x6, both 5.625" — that's a resaw-thickness choice within one cant segment). Different widths (e.g. 2x4 vs 2x6) each get their own segment of the cant instead, sized by the combination search — percent doesn't move material between them. Leaving % at 0 for a size you've checked just fills it evenly alongside the others sharing its width, using whatever's left after any sizes with a set %.</p>
-    </div>
+    <div class="panel"><label>Board sizes and mix (%)</label><div id="sw-list"></div></div>
+    <details class="help">
+      <summary>How the mix works</summary>
+      <div class="body">
+        <p>Percentages balance sizes that share the same actual width, such as 1x6 and 2x6 at 5.625" — a choice of resaw thickness within one segment of the cant.</p>
+        <p style="margin-top:8px;">Sizes of different widths each get their own segment of the cant, chosen by the combination search, so percentages do not move material between them.</p>
+        <p style="margin-top:8px;">A selected size left at 0% fills evenly alongside others of its width, using whatever remains after the sizes with a set percentage.</p>
+      </div>
+    </details>
     <div class="panel">
       <div class="row" style="justify-content:space-between;align-items:center;">
         <label style="margin:0;">Beams (max 2)</label>
@@ -1121,8 +1158,15 @@ function renderSoftwoodOptions(){
       </div>
       <div id="beam-list"></div>
       <p class="footnote" id="beam-max-hint" style="margin-top:8px;"></p>
-      <p class="footnote" style="margin-top:8px;">Boxed heart centers the beam on the pith and maximizes surrounding board yield. Free of heart center offsets the beam so the pith falls outside it — more stable, smaller yield from the remaining wood. Fit is checked live against the current log — no need to visit Results to find out.</p>
     </div>
+    <details class="help">
+      <summary>Beam placement</summary>
+      <div class="body">
+        <p><b>Boxed heart</b> centres the beam on the pith and leaves the most usable wood around it.</p>
+        <p style="margin-top:8px;"><b>Free of heart center</b> offsets the beam so the pith falls outside it. The beam is more stable in service; less is recovered from the rest of the log.</p>
+        <p style="margin-top:8px;">Beam sizes are checked against the current log as they are entered.</p>
+      </div>
+    </details>
     <div class="panel">
       <label>Kerf override for this log</label>
       <div class="row"><div class="field"><input type="number" step="0.0625" id="kerf-ov" value="${sw.kerfOverride ?? state.settings.kerf}"></div></div>
@@ -1159,7 +1203,7 @@ function renderSoftwoodOptions(){
   function updateBeamUI(){
     const g = beamGeomCtx();
     const hint = wrap.querySelector('#beam-max-hint');
-    if(hint) hint.textContent = `This log: largest square beam ≈ ${fmt(beamMaxSquare('boxed',g.xs,g.L,g.dL,g.dS,g.bow),2)}" boxed heart, ${fmt(beamMaxSquare('fohc',g.xs,g.L,g.dL,g.dS,g.bow),2)}" free of heart center.`;
+    if(hint) hint.textContent = `Largest square beam this log allows: ${fmt(beamMaxSquare('boxed',g.xs,g.L,g.dL,g.dS,g.bow),2)}" boxed heart · ${fmt(beamMaxSquare('fohc',g.xs,g.L,g.dL,g.dS,g.bow),2)}" free of heart center.`;
     if(!sw.beams.length) return;
     const placement = sw.beams[0].placement;
     const env = beamEnvelopeFor(sw.beams, g.kerf);
@@ -1249,9 +1293,14 @@ function renderHardwoodOptions(){
     <div class="panel">
       <label>Desired board width</label>
       <div class="row"><div class="field"><input type="number" step="0.125" id="hw-width" value="${hw.desiredWidth}"><span class="unit">in</span></div></div>
-      <p class="footnote" style="margin-top:8px;">This is the width you square the log to by opening it, rotating, and taking a straight-edge board each turn — same idea as the softwood cant, just one width instead of a sum of catalog sizes.</p>
     </div>
     <div class="panel"><label>Thickness classes and mix (%)</label><div id="hw-list"></div></div>
+    <details class="help">
+      <summary>About the desired width</summary>
+      <div class="body">
+        <p>This is the width the log is squared to by opening it, rotating, and taking a straight-edged board each turn. It replaces the softwood approach of summing catalog widths: here the width is a single figure of your choosing, and the cant is resawn to the selected thicknesses.</p>
+      </div>
+    </details>
     <div class="panel">
       <label>Kerf override for this log</label>
       <div class="row"><div class="field"><input type="number" step="0.0625" id="kerf-ov" value="${hw.kerfOverride ?? state.settings.kerf}"></div></div>
@@ -1288,12 +1337,12 @@ function renderResults(){
   const r = state.results;
   const wrap = el(`<div>
     <h2>Cutting plan</h2>
-    <p class="sub">${state.log.species==='softwood'?'Softwood — dimensional lumber':'Hardwood — '+fmt(state.hardwood.desiredWidth,2)+'" desired width'} <span style="color:var(--text-dim);">· ${state.log.species==='softwood'?SOFTWOOD_VERSION:HARDWOOD_VERSION}</span></p>
+    <p class="sub">${state.log.species==='softwood'?'Softwood — dimensional lumber':'Hardwood — '+fmt(state.hardwood.desiredWidth,2)+'" desired width'}</p>
     ${state.log.species==='softwood' ? `<div class="rangebtn">
       <button class="btn ${state.resultMode==='max'?'primary':''}" id="mode-max">Max yield</button>
       <button class="btn ${state.resultMode==='mix'?'primary':''}" id="mode-mix">Your mix</button>
     </div>
-    <p class="footnote" style="margin-top:-10px;margin-bottom:16px;">${state.resultMode==='max' ? 'Max Yield searches every width combination independent of your % targets, and picks whichever produces the highest total dollar value using the $/bf figures in Settings.' : 'Your Mix uses only the sizes and percentages you set on the Boards screen.'}</p>` : ''}
+    <p class="footnote" style="margin-top:-10px;margin-bottom:16px;">${state.resultMode==='max' ? 'Highest-value width combination, using the prices in Settings.' : 'Your selected sizes and percentages, as set on the Boards screen.'}</p>` : ''}
     <label>Board layout</label>
     <canvas id="xsec" width="800" height="620"></canvas>
     <div id="legend" style="display:flex;flex-wrap:wrap;gap:10px 16px;margin:10px 0 4px;"></div>
@@ -1302,14 +1351,14 @@ function renderResults(){
       <input type="range" id="slice-pos" min="0" max="100" step="0.5" style="flex:1;">
       <span class="unit" id="slice-readout" style="margin:0;white-space:nowrap;"></span>
     </div>
-    <label>Mill orientation — drag to rotate, pinch/scroll to zoom</label>
+    <label>Mill orientation</label>
     <canvas id="mill3d" width="800" height="560" style="touch-action:none;cursor:grab;"></canvas>
     <div style="display:flex;align-items:center;gap:12px;margin-top:8px;">
       <button class="btn small" id="roll-ccw">&#8634; Roll</button>
       <span class="unit" id="roll-readout" style="flex:1;text-align:center;margin:0;"></span>
       <button class="btn small" id="roll-cw">Roll &#8635;</button>
     </div>
-    <p class="footnote" style="margin-top:6px;margin-bottom:10px;">The log as loaded on the mill, seen from above by default (drag to tilt/orbit): bed grid underneath, blade cutting horizontally from the top down, large end at left. The yellow stripe is the N face (up for the opening cut); the cyan stripe is the E face — matching the N/E letters on the layout above. After each rotation, whichever stripe faces up is the face the blade sees next. The slider slices along the log: the white ring appears in BOTH views — here as the cut plane, and on the board layout above as a live circle over the plan, so you can watch the log close in on the boards as you approach the small end. The Roll buttons turn the log a quarter turn at a time, exactly like rolling it on the bed with a cant hook — the stripes, the bow, the plan, and the compass letters all turn together, and the readout shows which face is up. Drag until the small end faces you and the view lines up exactly with the board layout.</p>
+    <div id="mill-legend" style="display:flex;flex-wrap:wrap;gap:8px 16px;margin-top:10px;margin-bottom:10px;"></div>
     <div class="statgrid" style="margin-top:10px;">
       <div class="stat"><div class="label">Yield</div><div class="val">${r.yieldPct}%</div></div>
       <div class="stat"><div class="label">Board feet</div><div class="val">${r.totalBF + (r.bonusBF||0) + (r.beamBF||0) + (r.customBF||0)}</div></div>
@@ -1489,7 +1538,7 @@ function renderResults(){
       mRows += `<tr><td style="font-weight:600;">Total</td><td></td><td></td><td style="font-weight:600;">$${fmt(customValueSum,0)}</td></tr>`;
       mt.innerHTML = mRows;
       cutlist.appendChild(mt);
-      cutlist.appendChild(el(`<p class="footnote" style="margin-top:6px;">Live edge trimmed, each pass left at its true maximum width — trim further to your desired width whenever you're ready. Top: fixed 2 passes. East/west: pass count derived from the cant's own height, following your open-cut / rotate CCW / rotate 180 sequence. Value uses the highest-priority selected thickness's $/bf.</p>`));
+      cutlist.appendChild(el(`<p class="footnote" style="margin-top:6px;">Live edge trimmed; each pass is left at its true maximum width. Value uses the $/bf of the highest-priority selected thickness.</p>`));
     }
 
     if(r.fits){
@@ -1504,11 +1553,23 @@ function renderResults(){
     }
   }
 
-  const foot = el(`<p class="footnote">${r.species==='softwood' ?
-    `Prototype notes: fixed full-length boards only, straight sawing (no sweep-following). Cant width is the sum of your selected board widths plus kerf; height is the max the log allows for that width. Wings grow outward course-by-course from the cant in all four directions — each step takes the widest preselected size that still fits, stepping down as the log narrows, until nothing selected fits and (in Max Yield) it's the $/bf value in Settings, not raw board count, that decides which width combination and which size gets priority. The dashed line marks the cant boundary; solid colored pieces are your requested mix; dash-bordered pieces are extra sizes recovered from leftover space.` :
-    `Prototype notes: fixed full-length boards only, straight sawing (no sweep-following). Cant width is your desired board width; height is the max the log allows for that width, resawn by thickness. Top/east/west max-width passes follow your rotate-and-square process, trimmed to the true geometric maximum rather than a fixed size — south is not yet recovered.`}
-    Board layout shown at one representative cross-section — every board runs the log's full length. All figures rounded to whole numbers.</p>`);
-  wrap.appendChild(foot);
+  const method = (r.species==='softwood' ?
+    `The cant is sized to the combined width of the selected board sizes plus kerf, and to the greatest height the log allows at that width. Wings are then built outward from the cant on all four sides, one course at a time, each course taking the widest selected size that still fits and stepping down as the log narrows. In Max yield, the combination is chosen on total value using the prices in Settings.` :
+    `The cant is sized to the desired board width and the greatest height the log allows, then resawn by thickness. The top, east and west passes follow the open, rotate and square sequence, each trimmed to its true maximum rather than a fixed size. Material below the cant is recovered as a separate south cant.`);
+
+  wrap.appendChild(el(`<details class="help">
+    <summary>How to read this plan</summary>
+    <div class="body">
+      <h4>Board layout</h4>
+      <p>A cross-section taken at the log's most restrictive point along its length, viewed from the small end. Solid pieces are the requested mix; dash-bordered pieces are extra sizes recovered from leftover space. The dashed outline marks the cant boundary.</p>
+      <h4>Slice</h4>
+      <p>The slider moves a reference plane along the length. Both views mark the log's true cross-section at that position, so the plan can be checked against the log where it is tightest.</p>
+      <h4>Mill orientation</h4>
+      <p>The log as it sits on the mill: bed below, blade cutting from above, large end at left. The N and E stripes identify two reference faces and turn with the log, so the face presented to the blade after each rotation stays unambiguous. Roll turns the log a quarter turn at a time; the view rotates only, the plan is unchanged.</p>
+      <h4>Method</h4>
+      <p>${method} Boards run the full length of the log and all cuts are straight. Quantities and values are rounded to whole numbers.</p>
+    </div>
+  </details>`));
 
   setTimeout(()=>{
     const xsec = wrap.querySelector('#xsec');
@@ -1517,6 +1578,13 @@ function renderResults(){
     if(m3){
       drawMill3d(m3, r);
       attachMillDrag(m3, r);
+      const millLegend = wrap.querySelector('#mill-legend');
+      if(millLegend){
+        const chalk = getComputedStyle(document.documentElement).getPropertyValue('--chalk');
+        [[DIR_N_COLOR,'N face'],[DIR_E_COLOR,'E face'],[chalk,'slice plane']].forEach(([col,txt])=>{
+          millLegend.appendChild(el(`<span class="chip"><i style="background:${col};"></i>${txt}</span>`));
+        });
+      }
       const sliceIn = wrap.querySelector('#slice-pos');
       const sliceOut = wrap.querySelector('#slice-readout');
       const rollOut = wrap.querySelector('#roll-readout');
@@ -1555,10 +1623,28 @@ const RING_STYLE = {
   large: {color:'#d97fa0', dash:[2,6]}
 };
 
-// Orientation stripe colors — vivid hues used nowhere else in the app (not in the board
+// Orientation stripe colors — hues reserved app-wide for orientation (not in the board
 // palette, ring styles, or theme), so N/E can never be confused with a board or a section ring.
-const DIR_N_COLOR = '#ffd94a'; // N face — yellow
-const DIR_E_COLOR = '#40d6ff'; // E face — cyan
+let DIR_N_COLOR = '#ffd94a'; // N face — yellow
+let DIR_E_COLOR = '#40d6ff'; // E face — cyan
+
+// Canvas ink that can't be plain CSS variables (mutated per theme by applyTheme): the
+// section rings and orientation stripes need darker variants to stay readable on paper.
+const THEME_INK = {
+  dark:  { tight:'#6f9db3', small:'#8fd39c', large:'#d97fa0', n:'#ffd94a', e:'#40d6ff', meta:'#0c161e' },
+  light: { tight:'#2e6b8c', small:'#2e8c4f', large:'#b8497a', n:'#a67c00', e:'#0e7fa6', meta:'#f4efe6' }
+};
+
+function applyTheme(t){
+  document.documentElement.dataset.theme = t==='light' ? 'light' : 'dark';
+  const ink = THEME_INK[t] || THEME_INK.dark;
+  RING_STYLE.tight.color=ink.tight; RING_STYLE.small.color=ink.small; RING_STYLE.large.color=ink.large;
+  DIR_N_COLOR=ink.n; DIR_E_COLOR=ink.e;
+  const meta = document.querySelector('meta[name=theme-color]');
+  if(meta) meta.content = ink.meta;
+  const btn = document.getElementById('theme-toggle');
+  if(btn) btn.innerHTML = t==='light' ? '&#9789; dark' : '&#9788; light';
+}
 
 function drawCrossSection(canvas, r){
   const ctx = canvas.getContext('2d');
@@ -1614,7 +1700,9 @@ function drawCrossSection(canvas, r){
 
   function labelWithOutline(label, x, y, size){
     ctx.font=`bold ${size}px IBM Plex Mono`; ctx.textAlign='center';
-    ctx.lineWidth=3.5; ctx.strokeStyle='#0a1319'; ctx.strokeText(label,x,y);
+    ctx.lineWidth=3.5;
+    ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--halo');
+    ctx.strokeText(label,x,y);
     ctx.fillText(label,x,y);
   }
 
@@ -1959,7 +2047,7 @@ function drawMill3d(canvas, r){
     const zTop = szc+srr+1.2;
     const q = [P(sx,-bedY,bedZ), P(sx,bedY,bedZ), P(sx,bedY,zTop), P(sx,-bedY,zTop)];
     ctx.beginPath(); q.forEach((p,i)=> i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1])); ctx.closePath();
-    ctx.fillStyle = 'rgba(238,248,251,0.07)'; ctx.fill();
+    ctx.fillStyle = css('--slice-fill'); ctx.fill();
     ctx.strokeStyle = css('--chalk'); ctx.lineWidth=1.5; ctx.stroke();
     ringAt(sx, css('--chalk'), 3, []);
   }
@@ -2033,16 +2121,10 @@ function attachMillDrag(canvas, r){
   canvas.ondblclick = ()=>{ millView.zoom = 1; drawMill3d(canvas, r); };
 }
 
-// Build the web app manifest at runtime (avoids needing a second manifest.json file)
-const manifest = {
-  name: 'Millplan Web',
-  short_name: 'Millplan',
-  start_url: './',
-  display: 'standalone',
-  background_color: '#101d27',
-  theme_color: '#101d27'
-};
-document.getElementById('manifest-link').href = URL.createObjectURL(new Blob([JSON.stringify(manifest)], {type:'application/json'}));
+// The manifest is a real file (manifest.json) rather than a runtime blob: Android/Chrome
+// resolves start_url and scope against the manifest's own URL, so a blob: manifest fails
+// its installability checks — the app would open in a plain browser tab instead of
+// standalone. iOS keeps using the apple-* meta tags either way.
 
 // Register the service worker for offline caching. Safe to fail silently if unsupported.
 if ('serviceWorker' in navigator) {
@@ -2051,7 +2133,15 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-document.getElementById('eyebrow').textContent = `Sawmill planner — ${APP_VERSION}`;
+let currentTheme = 'dark';
+try{ const t = localStorage.getItem('millplan-theme'); if(t==='light'||t==='dark') currentTheme = t; }catch(e){}
+applyTheme(currentTheme);
+document.getElementById('theme-toggle').onclick = ()=>{
+  currentTheme = currentTheme==='light' ? 'dark' : 'light';
+  try{ localStorage.setItem('millplan-theme', currentTheme); }catch(e){}
+  applyTheme(currentTheme);
+  renderAll();
+};
 loadSettings();
 loadLog();
 renderAll();
