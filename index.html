@@ -13,9 +13,9 @@
 <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders:wght@500;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#101d27; --panel:#16283499; --panel2:#1c3140; --line:#3c5a6b; --line-dim:#284051;
-  --chalk:#bcd6de; --amber:#d99150; --amber-dim:#8a6138; --text:#e9eef0; --text-dim:#8fa6b0;
-  --red:#e2664a; --green:#7fb88a; --radius:2px;
+  --bg:#0c161e; --panel:#16283499; --panel2:#1c3140; --line:#6f9db3; --line-dim:#3c5a6b;
+  --chalk:#eef8fb; --amber:#e8a35f; --amber-dim:#a97a48; --text:#f5f9fa; --text-dim:#b6cad3;
+  --red:#ff7a5c; --green:#8fd39c; --radius:2px;
 }
 *{box-sizing:border-box;}
 body{margin:0;background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased;}
@@ -92,19 +92,24 @@ table td:last-child,table th:last-child{text-align:right;}
 // that specific engine's logic changes, so you can tell at a glance which plan you're
 // looking at came from which version of the math. Softwood is locked as of sw-3 —
 // changes from here on should only touch hardwood unless you say otherwise.
-const APP_VERSION = 'v11';
-const SOFTWOOD_VERSION = 'sw-3 (locked)';
-const HARDWOOD_VERSION = 'hw-6';
+const APP_VERSION = 'v12';
+const SOFTWOOD_VERSION = 'sw-4';
+const HARDWOOD_VERSION = 'hw-7';
 
+// Rough starting $/board-foot estimates for softwood, seeded from general SPF/timber market
+// ranges (framing lumber ~$0.7-1.1/bf, 1x appearance boards run a bit higher per bf, and
+// squared timbers/beams command a premium). These are deliberately editable in Settings —
+// real prices vary hugely by species, grade, and region, so treat these as a starting guess
+// to be corrected to your own market before trusting Max Yield's $ ranking.
 const state = {
   tab: 'settings',
   settings: {
     kerf: 0.082,
     dims: {
-      '1x4': {w:3.625,h:0.75}, '1x6':{w:5.625,h:0.75}, '1x8':{w:7.625,h:0.75}, '1x10':{w:9.625,h:0.75},
-      '2x4': {w:3.625,h:1.6},  '2x6':{w:5.625,h:1.6},  '2x8':{w:7.625,h:1.6},  '2x10':{w:9.625,h:1.6},
-      '4x4': {w:3.625,h:3.625}, '6x6':{w:5.625,h:5.625}, '8x8':{w:7.625,h:7.625},
-      '4/4':{h:1.0}, '5/4':{h:1.25}, '6/4':{h:1.5}, '8/4':{h:2.0}
+      '1x4': {w:3.625,h:0.75,value:1.60}, '1x6':{w:5.625,h:0.75,value:1.65}, '1x8':{w:7.625,h:0.75,value:1.70}, '1x10':{w:9.625,h:0.75,value:1.80},
+      '2x4': {w:3.625,h:1.6,value:0.85},  '2x6':{w:5.625,h:1.6,value:0.90},  '2x8':{w:7.625,h:1.6,value:1.00},  '2x10':{w:9.625,h:1.6,value:1.15},
+      '4x4': {w:3.625,h:3.625,value:1.30}, '6x6':{w:5.625,h:5.625,value:1.60}, '8x8':{w:7.625,h:7.625,value:2.00},
+      '4/4':{h:1.0,value:3.00}, '5/4':{h:1.25,value:3.20}, '6/4':{h:1.5,value:3.40}, '8/4':{h:2.0,value:3.75}
     }
   },
   log: { largeDia:16, smallDia:12, length:120, bow:1, species:'softwood' },
@@ -151,48 +156,82 @@ function halfExtentAt(x,L,dL,dS,horizOffset){
   return rem>0 ? Math.sqrt(rem) : 0;
 }
 
-function priorityPack(W,H,orderNames,dims,percents,kerf,useProportional){
-  const effPercents = {};
-  let totalP = orderNames.reduce((s,n)=>s+(percents[n]||0),0);
-  if(totalP<=0){ orderNames.forEach(n=>effPercents[n]=100/orderNames.length); totalP=100; }
-  else orderNames.forEach(n=>effPercents[n]=percents[n]||0);
+const MIN_DIM = 0.0625; // 1/16" — anything at or below this is treated as "not a real board" to avoid divide-by-zero / infinite-row hangs
+
+function priorityPack(W,H,orderNamesIn,dims,percents,kerf,useProportional){
+  const safeKerf = Math.max(0, kerf||0);
+  // Drop any degenerate (zero/blank) dimensions up front — this is the fix for the page-freeze
+  // bug: a cleared input becoming 0 used to make placeRows loop effectively forever.
+  const orderNames = orderNamesIn.filter(n=> dims[n] && dims[n].w>MIN_DIM && dims[n].h>MIN_DIM);
 
   let remH=H, yCursor=0;
-  const counts={}; orderNames.forEach(n=>counts[n]=0);
+  const counts={}; orderNamesIn.forEach(n=>counts[n]=0);
   const placements=[];
 
   function placeRows(name,rows){
     const bw=dims[name].w, bh=dims[name].h;
-    const perRow = Math.floor((W+kerf)/(bw+kerf));
-    if(perRow<=0 || rows<=0) return;
+    const stepW = bw+safeKerf, stepH = bh+safeKerf;
+    if(stepW<=1e-6 || stepH<=1e-6) return 0;
+    const perRow = Math.floor((W+safeKerf)/stepW);
+    if(perRow<=0 || rows<=0) return 0;
     for(let ri=0; ri<rows; ri++){
       for(let ci=0; ci<perRow; ci++){
-        placements.push({name,x:ci*(bw+kerf), y:yCursor+ri*(bh+kerf), width:bw, height:bh, rotated: dims[name].rotated});
+        placements.push({name,x:ci*stepW, y:yCursor+ri*stepH, width:bw, height:bh, rotated: dims[name].rotated});
       }
     }
-    counts[name]+=rows*perRow;
-    remH -= rows*(bh+kerf);
-    yCursor += rows*(bh+kerf);
+    counts[name]=(counts[name]||0)+rows*perRow;
+    remH -= rows*stepH;
+    yCursor += rows*stepH;
+    return rows*perRow;
   }
 
-  if(useProportional){
-    for(const name of orderNames){
-      const bh=dims[name].h, bw=dims[name].w;
-      if(bw>W+1e-9) continue;
-      const budget = H*(effPercents[name]/totalP);
-      let rows = Math.floor((budget+1e-9)/(bh+kerf));
-      const maxRows = Math.floor((remH+kerf)/(bh+kerf));
-      rows = Math.min(rows,maxRows);
-      placeRows(name,rows);
+  // Split selected types into "has a target %" vs "0% / unset" — the latter are treated as
+  // gap-fillers that soak up whatever space is left after the percentage-driven types have
+  // taken their proportional share, rather than competing for it.
+  // If NOTHING has a target % (nobody set one), treat all selected types as equally weighted
+  // rather than falling through to a first-come-first-served sweep — that was the "typed 0 for
+  // everything and got 100% of one size" bug found in testing. If SOME are 0 and others aren't,
+  // the 0% ones stay as leftover-fillers (see below).
+  const anyPct = orderNames.some(n=> (percents[n]||0) > 0);
+  const pctNames = anyPct ? orderNames.filter(n=> (percents[n]||0) > 0) : orderNames.slice();
+  const zeroNames = anyPct ? orderNames.filter(n=> !(percents[n]>0)) : [];
+
+  if(useProportional && pctNames.length){
+    const totalP = pctNames.reduce((s,n)=>s+(percents[n]||0),0) || 1;
+    const target = {}; pctNames.forEach(n=> target[n] = (percents[n]/totalP));
+    const rowsSoFar = {}; pctNames.forEach(n=> rowsSoFar[n]=0);
+    // Weighted round-robin / deficit scheduling: repeatedly hand ONE row to whichever eligible
+    // type is furthest below its target share, so leftover space (from rounding) gets spread
+    // across the mix instead of being dumped entirely into the first/highest-% type.
+    let guard = 0;
+    while(guard++ < 5000){
+      let best=null, bestDeficit=-Infinity;
+      for(const n of pctNames){
+        const bw=dims[n].w, bh=dims[n].h;
+        if(bw>W+1e-9) continue;
+        if(remH+1e-9 < bh+safeKerf) continue;
+        const totalPlaced = pctNames.reduce((s,m)=>s+rowsSoFar[m],0) + 1;
+        const deficit = target[n] - (rowsSoFar[n]/Math.max(1,totalPlaced));
+        if(deficit>bestDeficit){ bestDeficit=deficit; best=n; }
+      }
+      if(!best) break;
+      const placed = placeRows(best,1);
+      if(placed<=0) break;
+      rowsSoFar[best] += 1;
     }
   }
-  let progress=true;
-  while(progress){
+
+  // Fill any remaining space with 0%-selected types first (gap fill for boards you still
+  // want but didn't give a target ratio to), then keep sweeping the whole list until nothing
+  // more fits (covers the useProportional:false / straight priority-fill case too).
+  let progress=true, guard2=0;
+  while(progress && guard2++<2000){
     progress=false;
-    for(const name of orderNames){
+    const sweepList = useProportional ? [...zeroNames, ...pctNames] : orderNames;
+    for(const name of sweepList){
       const bh=dims[name].h, bw=dims[name].w;
       if(bw>W+1e-9) continue;
-      const rows = Math.floor((remH+kerf)/(bh+kerf));
+      const rows = Math.floor((remH+safeKerf)/(bh+safeKerf));
       if(rows>0){ placeRows(name,rows); progress=true; }
     }
   }
@@ -214,30 +253,34 @@ function effectiveDimsFor(names, dims, W, H, kerf){
   return eff;
 }
 
-function fallbackFill(W, remH, yCursorStart, names, effDims, kerf){
+function fallbackFill(W, remH, yCursorStart, namesIn, effDims, kerf){
+  const safeKerf = Math.max(0, kerf||0);
+  const names = namesIn.filter(n=> effDims[n] && effDims[n].w>MIN_DIM && effDims[n].h>MIN_DIM);
   let remaining = remH, yCursor = yCursorStart;
-  const counts = {}; names.forEach(n=>counts[n]=0);
+  const counts = {}; namesIn.forEach(n=>counts[n]=0);
   const placements = [];
   function placeRows(name, rows){
     const bw=effDims[name].w, bh=effDims[name].h;
-    const perRow = Math.floor((W+kerf)/(bw+kerf));
+    const stepW=bw+safeKerf, stepH=bh+safeKerf;
+    if(stepW<=1e-6 || stepH<=1e-6) return;
+    const perRow = Math.floor((W+safeKerf)/stepW);
     if(perRow<=0 || rows<=0) return;
     for(let ri=0; ri<rows; ri++){
       for(let ci=0; ci<perRow; ci++){
-        placements.push({name,x:ci*(bw+kerf), y:yCursor+ri*(bh+kerf), width:bw, height:bh, rotated:effDims[name].rotated});
+        placements.push({name,x:ci*stepW, y:yCursor+ri*stepH, width:bw, height:bh, rotated:effDims[name].rotated});
       }
     }
-    counts[name]+=rows*perRow;
-    remaining -= rows*(bh+kerf);
-    yCursor += rows*(bh+kerf);
+    counts[name]=(counts[name]||0)+rows*perRow;
+    remaining -= rows*stepH;
+    yCursor += rows*stepH;
   }
-  let progress=true;
-  while(progress){
+  let progress=true, guard=0;
+  while(progress && guard++<2000){
     progress=false;
     for(const name of names){
       const bh=effDims[name].h, bw=effDims[name].w;
       if(bw>W+1e-9) continue;
-      const rows = Math.floor((remaining+kerf)/(bh+kerf));
+      const rows = Math.floor((remaining+safeKerf)/(bh+safeKerf));
       if(rows>0){ placeRows(name,rows); progress=true; }
     }
   }
@@ -262,9 +305,19 @@ function packZone(W,H,orderNames,fallbackNames,dims,percents,kerf,useProportiona
 
 function buildOrder(selectedNames, mode, dims, percents){
   const arr = selectedNames.slice();
-  if(mode==='max') arr.sort((a,b)=> dims[b].w - dims[a].w);
+  if(mode==='value') arr.sort((a,b)=> (dims[b].value||0) - (dims[a].value||0) || dims[b].w-dims[a].w);
+  else if(mode==='max') arr.sort((a,b)=> dims[b].w - dims[a].w);
   else arr.sort((a,b)=> (percents[b]||0) - (percents[a]||0));
   return arr;
+}
+
+function scoreValue(counts, dims, L){
+  let s = 0;
+  for(const [name,c] of Object.entries(counts)){
+    if(!dims[name] || !c) continue;
+    s += boardFeet(dims[name].w, dims[name].h, L, c) * (dims[name].value||0);
+  }
+  return s;
 }
 
 function boardCount(counts){ return Object.values(counts).reduce((a,b)=>a+b,0); }
@@ -321,8 +374,30 @@ function findBestCantForWidth(W,xs,L,dL,dS,bow,cRange,step){
 
 function totalPercentOf(g, percents){ return g.names.reduce((s,n)=>s+(percents[n]||0),0); }
 
+// Searches width AND vertical offset together to find the single largest-area rectangle the
+// log's envelope will allow, with no reference to the board catalog at all. Used whenever no
+// selected board/beam combination fits, so the user gets a concrete "here's the biggest square
+// or rectangle this log can give you" instead of a blank circle.
+function maxInscribedRect(xs,L,dL,dS,bow){
+  const maxW = Math.max(dL,dS,1);
+  let best=null;
+  for(let w=0.5; w<=maxW; w+=0.25){
+    const cant = findBestCantForWidth(w, xs,L,dL,dS,bow, Math.max(bow*1.5,1), 0.25);
+    if(!cant || cant.H<0.3) continue;
+    const area = w*cant.H;
+    if(!best || area>best.area) best = {W:w, H:cant.H, c:cant.c, area};
+  }
+  return best;
+}
+
 function chooseActiveGroups(mode, groups, dims, percents, xs, L, dL, dS, bow, kerf, cRangeBase){
   if(mode==='max'){
+    // Max Yield is a $-value search, independent of the Your Mix percentages: every subset of
+    // selected width-groups is tried (that combinatorial sweep is the "run several iterations
+    // and compare" step), each packed with its highest-$/bf types getting first claim on the
+    // available height, and the subset with the highest total dollar value wins — not just the
+    // one with the most raw board feet. This is what lets a combination of many lower-priced
+    // boards beat a smaller number of premium ones when the numbers actually work out that way.
     const n = groups.length;
     let best=null;
     for(let mask=1; mask<(1<<n); mask++){
@@ -330,12 +405,12 @@ function chooseActiveGroups(mode, groups, dims, percents, xs, L, dL, dS, bow, ke
       const Wt = subset.reduce((s,g)=>s+g.width,0) + kerf*(subset.length-1);
       const cant = findBestCantForWidth(Wt, xs,L,dL,dS,bow, cRangeBase, 0.25);
       if(!cant || cant.H<2) continue;
-      let bf=0;
+      let value=0;
       subset.forEach(g=>{
-        const packed = packZone(g.width, cant.H, buildOrder(g.names,'mix',dims,percents), [], dims, percents, kerf, true);
-        bf += Object.entries(packed.primaryCounts).reduce((s,[nm,cnt])=>s+boardFeet(dims[nm].w,dims[nm].h,L,cnt),0);
+        const packed = packZone(g.width, cant.H, buildOrder(g.names,'value',dims,percents), [], dims, percents, kerf, false);
+        value += scoreValue(packed.primaryCounts, dims, L);
       });
-      if(!best || bf>best.bf) best={groups:subset, cant, bf};
+      if(!best || value>best.value) best={groups:subset, cant, value};
     }
     return best ? {activeGroups:best.groups, cant:best.cant} : {activeGroups:[], cant:null};
   }
@@ -368,22 +443,114 @@ function placeBeam(Wb,Hb,placement,xs,L,dL,dS,bow){
 }
 
 function boardFeet(w,h,L,count){ return (w*h*L*count)/144; }
+function pieceValue(w,h,L,count,perBf){ return boardFeet(w,h,L,count) * (perBf||0); }
 
 function logVolumeBF(dL,dS,L){
   const R1=dL/2, R2=dS/2;
   return (Math.PI*L/3)*(R1*R1+R1*R2+R2*R2)/144;
 }
 
+// ---- Softwood wing growth (sw-4): course-by-course, closest-to-center-first, using only
+// preselected catalog widths — replaces the old independent-rectangle pocket search to match
+// the user's real process of squaring off the next board in each direction and stepping down
+// in size as the log narrows, instead of pre-solving one big secondary "cant" per side.
+function growthCandidates(names, dims, percents, mode){
+  return names.filter(n=>dims[n] && dims[n].w>MIN_DIM && dims[n].h>MIN_DIM)
+    .map(n=>({name:n, w:dims[n].w, h:dims[n].h, value:dims[n].value||0, pct:percents[n]||0}))
+    .sort((a,b)=>{
+      if(Math.abs(a.w-b.w)>1e-6) return b.w-a.w; // widest board that still fits, first
+      if(mode==='max') return (b.value-a.value);
+      return (b.pct-a.pct);
+    });
+}
+
+function growVerticalCourses(direction, startY, xs,L,dL,dS,bow, candidates, kerf){
+  let cursor = startY;
+  const placed = [];
+  let guard=0;
+  while(candidates.length && guard++<400){
+    let chosen=null, chosenAvailW=0;
+    for(const c of candidates){
+      const bandCenter = cursor + direction*c.h/2;
+      const availW = cantMaxWidth(bandCenter, c.h, xs,L,dL,dS,bow);
+      if(availW >= c.w-1e-9){ chosen=c; chosenAvailW=availW; break; }
+    }
+    if(!chosen) break;
+    const stepW = chosen.w+kerf;
+    const perRow = Math.max(1, Math.floor((chosenAvailW+kerf)/stepW));
+    const rowY = direction>0 ? cursor : cursor - chosen.h;
+    for(let i=0;i<perRow;i++){
+      placed.push({name:chosen.name, width:chosen.w, height:chosen.h, cxIn:-chosenAvailW/2+chosen.w/2+i*stepW, cyIn:rowY+chosen.h/2, rotated:false});
+    }
+    cursor = direction>0 ? cursor+chosen.h+kerf : cursor-chosen.h-kerf;
+  }
+  return {placed, endCursor:cursor};
+}
+
+function growHorizontalCourses(direction, startX, cantC, xs,L,dL,dS,bow, candidates, kerf){
+  let cursor = startX;
+  const placed = [];
+  let guard=0;
+  while(candidates.length && guard++<400){
+    let chosen=null, chosenAvailH=0;
+    for(const c of candidates){
+      const outerX = cursor + direction*c.h;
+      const availH = cantMaxHeightForWidth(cantC, 2*Math.abs(outerX), xs,L,dL,dS,bow);
+      if(availH >= c.w-1e-9){ chosen=c; chosenAvailH=availH; break; }
+    }
+    if(!chosen) break;
+    const stepH = chosen.w+kerf;
+    const perCol = Math.max(1, Math.floor((chosenAvailH+kerf)/stepH));
+    const colX = direction>0 ? cursor : cursor-chosen.h;
+    for(let i=0;i<perCol;i++){
+      placed.push({name:chosen.name, width:chosen.h, height:chosen.w, cxIn:colX+chosen.h/2, cyIn:cantC-chosenAvailH/2+chosen.w/2+i*stepH, rotated:true});
+    }
+    cursor = cursor + direction*(chosen.h+kerf);
+  }
+  return {placed, endCursor:cursor};
+}
+
+function growAllWings(Wb,Hb,c, primary, fallbackCands, kerf, xs,L,dL,dS,bow){
+  const results = { top:[], bottom:[], left:[], right:[] };
+  const gT = growVerticalCourses(1, c+Hb/2+kerf, xs,L,dL,dS,bow, primary, kerf);
+  gT.placed.forEach(p=>results.top.push({...p,bonus:false}));
+  growVerticalCourses(1, gT.endCursor, xs,L,dL,dS,bow, fallbackCands, kerf).placed.forEach(p=>results.top.push({...p,bonus:true}));
+
+  const gB = growVerticalCourses(-1, c-Hb/2-kerf, xs,L,dL,dS,bow, primary, kerf);
+  gB.placed.forEach(p=>results.bottom.push({...p,bonus:false}));
+  growVerticalCourses(-1, gB.endCursor, xs,L,dL,dS,bow, fallbackCands, kerf).placed.forEach(p=>results.bottom.push({...p,bonus:true}));
+
+  const gR = growHorizontalCourses(1, Wb/2+kerf, c, xs,L,dL,dS,bow, primary, kerf);
+  gR.placed.forEach(p=>results.right.push({...p,bonus:false}));
+  growHorizontalCourses(1, gR.endCursor, c, xs,L,dL,dS,bow, fallbackCands, kerf).placed.forEach(p=>results.right.push({...p,bonus:true}));
+
+  const gL = growHorizontalCourses(-1, -(Wb/2+kerf), c, xs,L,dL,dS,bow, primary, kerf);
+  gL.placed.forEach(p=>results.left.push({...p,bonus:false}));
+  growHorizontalCourses(-1, gL.endCursor, c, xs,L,dL,dS,bow, fallbackCands, kerf).placed.forEach(p=>results.left.push({...p,bonus:true}));
+
+  return results;
+}
+
+function wingSideSummary(list){
+  if(!list.length) return null;
+  const minX = Math.min(...list.map(p=>p.cxIn-p.width/2)), maxX = Math.max(...list.map(p=>p.cxIn+p.width/2));
+  const minY = Math.min(...list.map(p=>p.cyIn-p.height/2)), maxY = Math.max(...list.map(p=>p.cyIn+p.height/2));
+  return {w:maxX-minX, h:maxY-minY, count:list.length};
+}
+
 function runSoftwood(mode){
-  const {largeDia:dL, smallDia:dS, length:L, bow} = state.log;
+  const dL = Math.max(state.log.largeDia||0, 0.5), dS = Math.max(state.log.smallDia||0, 0.5), L = Math.max(state.log.length||0, 1), bow = state.log.bow||0;
   const xs = sampleXs(L,26);
-  const kerf = state.softwood.kerfOverride ?? state.settings.kerf;
+  const kerf = Math.max(0, (state.softwood.kerfOverride ?? state.settings.kerf) || 0);
   const dims = state.settings.dims;
   const selectedNames = SOFTWOOD_ORDER.filter(n=>state.softwood.selected[n]);
   const percents = state.softwood.percents;
   const fallbackNames = SOFTWOOD_ORDER.filter(n=>!state.softwood.selected[n])
     .sort((a,b)=> dims[a].h-dims[b].h || dims[a].w-dims[b].w);
-  const orderNamesForPockets = buildOrder(selectedNames, 'mix', dims, percents);
+  const packOrderMode = mode==='max' ? 'value' : 'mix';
+  const primaryCandidates = growthCandidates(selectedNames, dims, percents, packOrderMode);
+  const fallbackCandidates = fallbackNames.filter(n=>dims[n]&&dims[n].w>MIN_DIM&&dims[n].h>MIN_DIM)
+    .map(n=>({name:n,w:dims[n].w,h:dims[n].h}));
 
   let beamResults = [];
   let usedBeamEnvelope = null;
@@ -402,46 +569,16 @@ function runSoftwood(mode){
     if(r.fits) usedBeamEnvelope = {Wb:Wtot,Hb:H,c:r.c};
   }
 
-  function mirrorPlacements(placements, zoneW, zoneH, axis){
-    return placements.map(p=>{
-      if(axis==='y') return {...p, y: zoneH - p.y - p.height};
-      if(axis==='x') return {...p, x: zoneW - p.x - p.width};
-      return p;
-    });
-  }
-
-  function packPocketsAround(Wb,Hb,c){
-    const right = orderNamesForPockets.length ? searchSidePocket(Wb/2+kerf, xs,L,dL,dS,bow, orderNamesForPockets, fallbackNames, dims, kerf, percents, dL/2, 0.25) : null;
-    const top = orderNamesForPockets.length ? searchVerticalPocket(c+Hb/2+kerf, 1, xs,L,dL,dS,bow, orderNamesForPockets, fallbackNames, dims, kerf, percents, dL, 0.25) : null;
-    const bot = orderNamesForPockets.length ? searchVerticalPocket(c-Hb/2-kerf, -1, xs,L,dL,dS,bow, orderNamesForPockets, fallbackNames, dims, kerf, percents, dL, 0.25) : null;
-    const zones = [];
-    if(right && right.w>=0.3 && right.subH>=0.3){
-      zones.push({name:'right', W:right.w, H:right.subH, cxIn:Wb/2+kerf+right.w/2, cyIn:right.subC, mirror:null});
-      zones.push({name:'left', W:right.w, H:right.subH, cxIn:-(Wb/2+kerf+right.w/2), cyIn:right.subC, mirror:'x'});
-    }
-    if(top && top.subW>=0.3 && top.h>=0.3){
-      zones.push({name:'top', W:top.subW, H:top.h, cxIn:0, cyIn:c+Hb/2+kerf+top.h/2, mirror:'y'});
-    }
-    if(bot && bot.subW>=0.3 && bot.h>=0.3){
-      zones.push({name:'bottom', W:bot.subW, H:bot.h, cxIn:0, cyIn:c-Hb/2-kerf-bot.h/2, mirror:null});
-    }
-    return zones.map(z=>{
-      const packed = orderNamesForPockets.length ? packZone(z.W,z.H,orderNamesForPockets,fallbackNames,dims,percents,kerf,true) : {primaryCounts:{},bonusCounts:{},placements:[]};
-      const placements = z.mirror ? mirrorPlacements(packed.placements, z.W, z.H, z.mirror) : packed.placements;
-      return {...z, ...packed, placements};
-    });
-  }
-
-
-  let wingResults = [];
+  let wingResults = { top:[], bottom:[], left:[], right:[] };
   let mainCant = null;
   let segments = [];
   let envelope = null;
+  let noFitRect = null;
   const anyBeamInfeasible = beamResults.some(b=>!b.fits);
 
   if(usedBeamEnvelope && !anyBeamInfeasible){
     const {Wb,Hb,c} = usedBeamEnvelope;
-    wingResults = packPocketsAround(Wb,Hb,c);
+    wingResults = growAllWings(Wb,Hb,c, primaryCandidates, fallbackCandidates, kerf, xs,L,dL,dS,bow);
     const slice = findBindingSlice(c,Hb,xs,L,dL,dS,bow);
     envelope = {r:slice.r, y:slice.y};
   } else if(!beams.length && selectedNames.length){
@@ -451,14 +588,14 @@ function runSoftwood(mode){
       const Wt = activeGroups.reduce((s,g)=>s+g.width,0) + kerf*(activeGroups.length-1);
       let xCursor = -Wt/2;
       const rawSegments = activeGroups.map(g=>{
-        const packed = packZone(g.width, cant.H, buildOrder(g.names,'mix',dims,percents), [], dims, percents, kerf, true);
+        const packed = packZone(g.width, cant.H, buildOrder(g.names,packOrderMode,dims,percents), [], dims, percents, kerf, mode!=='max');
         const seg = {width:g.width, names:g.names, cxIn:xCursor+g.width/2, packed};
         xCursor += g.width + kerf;
         return seg;
       });
 
       // shrink the cant to the actual used height (tallest segment) before evaluating wings,
-      // so leftover material inside the theoretical cant becomes available to the pocket search
+      // so leftover material inside the theoretical cant becomes available to the wing growth
       const usedHeights = rawSegments.map(seg=>
         seg.packed.placements.reduce((m,p)=>Math.max(m, p.y+p.height), 0)
       );
@@ -469,8 +606,20 @@ function runSoftwood(mode){
 
       mainCant = {W:Wt, H:actualH, c:actualC};
       segments = rawSegments.map(seg=>({...seg, cyIn:actualC}));
-      wingResults = packPocketsAround(Wt, actualH, actualC);
+      wingResults = growAllWings(Wt, actualH, actualC, primaryCandidates, fallbackCandidates, kerf, xs,L,dL,dS,bow);
       const slice = findBindingSlice(actualC, actualH, xs,L,dL,dS,bow);
+      envelope = {r:slice.r, y:slice.y};
+    }
+  }
+
+  // Nothing fit (no beam placed, or no selected width-combo produced a usable cant): surface
+  // the geometric maximum rectangle so the user has a concrete target for what to try next,
+  // instead of a bare circle.
+  if(!envelope && (beams.length || selectedNames.length)){
+    const best = maxInscribedRect(xs,L,dL,dS,bow);
+    if(best){
+      noFitRect = best;
+      const slice = findBindingSlice(best.c, best.H, xs,L,dL,dS,bow);
       envelope = {r:slice.r, y:slice.y};
     }
   }
@@ -478,9 +627,11 @@ function runSoftwood(mode){
   const totalCounts = {};
   const bonusCounts = {};
   SOFTWOOD_ORDER.forEach(n=>{ totalCounts[n]=0; bonusCounts[n]=0; });
-  wingResults.forEach(z=>{
-    Object.entries(z.primaryCounts||{}).forEach(([k,v])=>totalCounts[k]=(totalCounts[k]||0)+v);
-    Object.entries(z.bonusCounts||{}).forEach(([k,v])=>bonusCounts[k]=(bonusCounts[k]||0)+v);
+  ['top','bottom','left','right'].forEach(side=>{
+    (wingResults[side]||[]).forEach(p=>{
+      if(p.bonus) bonusCounts[p.name]=(bonusCounts[p.name]||0)+1;
+      else totalCounts[p.name]=(totalCounts[p.name]||0)+1;
+    });
   });
   segments.forEach(seg=>{
     Object.entries(seg.packed.primaryCounts).forEach(([k,v])=>totalCounts[k]=(totalCounts[k]||0)+v);
@@ -488,14 +639,15 @@ function runSoftwood(mode){
   });
 
   let totalBF = 0, bonusBF = 0;
-  let totalArea = 0;
+  let totalArea = 0, totalValue = 0;
   SOFTWOOD_ORDER.forEach(n=>{
     totalBF += boardFeet(dims[n].w, dims[n].h, L, totalCounts[n]);
     bonusBF += boardFeet(dims[n].w, dims[n].h, L, bonusCounts[n]);
     totalArea += dims[n].w * dims[n].h * (totalCounts[n] + bonusCounts[n]);
+    totalValue += pieceValue(dims[n].w, dims[n].h, L, totalCounts[n]+bonusCounts[n], dims[n].value);
   });
   const beamBF = beamResults.filter(b=>b.fits).reduce((s,b)=>s+boardFeet(b.w,b.h,L,1),0);
-  beamResults.filter(b=>b.fits).forEach(b=>{ totalArea += b.w*b.h; });
+  beamResults.filter(b=>b.fits).forEach(b=>{ totalArea += b.w*b.h; totalValue += pieceValue(b.w,b.h,L,1,b.value ?? 1.20); });
   const logVolume = logVolumeBF(dL,dS,L);
   const yieldPct = logVolume>0 ? Math.round(100*(totalBF+bonusBF+beamBF)/logVolume) : 0;
   const smallEndArea = Math.PI*Math.pow(dS/2,2);
@@ -505,37 +657,10 @@ function runSoftwood(mode){
     species:'softwood', mode, selectedNames, totalCounts, bonusCounts, totalBF: Math.round(totalBF), bonusBF: Math.round(bonusBF),
     beamResults, beamBF: Math.round(beamBF), mainCant, segments, wingResults, yieldPct: Math.min(yieldPct,100),
     areaUtilPct: Math.min(areaUtilPct,100),
-    kerf, dL, dS, L, bow, beamEnvelope: usedBeamEnvelope, envelope
+    kerf, dL, dS, L, bow, beamEnvelope: usedBeamEnvelope, envelope, noFitRect,
+    fits: !!(usedBeamEnvelope && !anyBeamInfeasible) || !!mainCant,
+    totalValue: Math.round(totalValue)
   };
-}
-
-function sidePocketWidth(innerX, subC, subH, xs, L, dL, dS, bow){
-  let minVal = Infinity;
-  for(const x of xs){
-    const r = taperDia(x,L,dL,dS)/2;
-    const y = bowOffset(x,L,bow);
-    const e = Math.abs(subC-y)+subH/2;
-    if(e>=r) return 0;
-    const halfExtent = Math.sqrt(r*r-e*e);
-    const avail = halfExtent - innerX;
-    if(avail<minVal) minVal=avail;
-  }
-  return Math.max(0, minVal===Infinity?0:minVal);
-}
-
-function searchSidePocket(innerX, xs, L, dL, dS, bow, orderNames, fallbackNames, dims, kerf, percents, vRange, step){
-  let best=null;
-  for(let subH=1; subH<=dL; subH+=step){
-    for(let subC=-vRange; subC<=vRange; subC+=step){
-      const w = sidePocketWidth(innerX,subC,subH,xs,L,dL,dS,bow);
-      if(w<0.3) continue;
-      const packed = packZone(w,subH,orderNames,fallbackNames,dims,percents,kerf,true);
-      const score = scoreArea(packed.primaryCounts,dims) + scoreArea(packed.bonusCounts,dims);
-      const area = w*subH;
-      if(!best || score>best.score || (score===best.score && area>best.area)) best={subC,subH,w,score,area};
-    }
-  }
-  return best;
 }
 
 function verticalPocketHeight(innerY,direction,subW,xs,L,dL,dS,bow){
@@ -552,35 +677,29 @@ function verticalPocketHeight(innerY,direction,subW,xs,L,dL,dS,bow){
   return Math.max(0,minVal===Infinity?0:minVal);
 }
 
-function searchVerticalPocket(innerY,direction,xs,L,dL,dS,bow,orderNames,fallbackNames,dims,kerf,percents,maxW,step){
-  let best=null;
-  for(let subW=0.5; subW<=maxW; subW+=step){
-    const h = verticalPocketHeight(innerY,direction,subW,xs,L,dL,dS,bow);
-    if(h<0.3) continue;
-    const packed = packZone(subW,h,orderNames,fallbackNames,dims,percents,kerf,true);
-    const score = scoreArea(packed.primaryCounts,dims) + scoreArea(packed.bonusCounts,dims);
-    const area = subW*h;
-    if(!best || score>best.score || (score===best.score && area>best.area)) best={subW,h,score,area};
-  }
-  return best;
-}
-
 function runHardwood(){
-  const {largeDia:dL, smallDia:dS, length:L, bow} = state.log;
+  const dL = Math.max(state.log.largeDia||0, 0.5), dS = Math.max(state.log.smallDia||0, 0.5), L = Math.max(state.log.length||0, 1), bow = state.log.bow||0;
   const xs = sampleXs(L,26);
-  const kerf = state.hardwood.kerfOverride ?? state.settings.kerf;
+  const kerf = Math.max(0, (state.hardwood.kerfOverride ?? state.settings.kerf) || 0);
   const dims = state.settings.dims;
   const selectedNames = HARDWOOD_ORDER.filter(n=>state.hardwood.selected[n]);
   const fallbackNames = HARDWOOD_ORDER.filter(n=>!state.hardwood.selected[n]);
   const percents = state.hardwood.percents;
   const W = state.hardwood.desiredWidth;
 
+  function withNoFitRect(base){
+    const best = maxInscribedRect(xs,L,dL,dS,bow);
+    if(!best) return base;
+    const slice = findBindingSlice(best.c, best.H, xs,L,dL,dS,bow);
+    return {...base, noFitRect:best, envelope:{r:slice.r, y:slice.y}};
+  }
+
   const empty = {species:'hardwood', fits:false, W, cantH:0, cantC:0, totalCounts:{}, bonusCounts:{},
-    totalBF:0, bonusBF:0, yieldPct:0, areaUtilPct:0, placements:[], dL,dS,L,bow,kerf};
-  if(!selectedNames.length || !(W>0)) return empty;
+    totalBF:0, bonusBF:0, yieldPct:0, areaUtilPct:0, placements:[], dL,dS,L,bow,kerf, totalValue:0};
+  if(!selectedNames.length || !(W>0)) return withNoFitRect(empty);
 
   const theoCant = findBestCantForWidth(W, xs, L, dL, dS, bow, Math.max(bow*1.5,1), 0.25);
-  if(!theoCant || theoCant.H<0.5) return {...empty, fits:false};
+  if(!theoCant || theoCant.H<0.5) return withNoFitRect({...empty, fits:false});
 
   const orderNames = buildOrder(selectedNames, 'mix', dims, percents);
   const dimsForPacking = {};
@@ -633,16 +752,18 @@ function runHardwood(){
       ]};
   }
 
-  let totalBF=0, bonusBF=0, totalArea=0;
+  let totalBF=0, bonusBF=0, totalArea=0, totalValue=0;
   HARDWOOD_ORDER.forEach(n=>{
     totalBF += boardFeet(W, dims[n].h, L, primary.counts[n]||0);
     bonusBF += boardFeet(W, dims[n].h, L, bonus.counts[n]||0);
     totalArea += W*dims[n].h*((primary.counts[n]||0)+(bonus.counts[n]||0));
+    totalValue += pieceValue(W, dims[n].h, L, (primary.counts[n]||0)+(bonus.counts[n]||0), dims[n].value);
     if(southPocket){
       const spW = southPocket.W;
       totalBF += boardFeet(spW, dims[n].h, L, southPocket.primaryCounts[n]||0);
       bonusBF += boardFeet(spW, dims[n].h, L, southPocket.bonusCounts[n]||0);
       totalArea += spW*dims[n].h*((southPocket.primaryCounts[n]||0)+(southPocket.bonusCounts[n]||0));
+      totalValue += pieceValue(spW, dims[n].h, L, (southPocket.primaryCounts[n]||0)+(southPocket.bonusCounts[n]||0), dims[n].value);
     }
   });
 
@@ -679,6 +800,9 @@ function runHardwood(){
     }
   }
   const customBF = customBoards.reduce((s,b)=>s+boardFeet(b.width,b.t,L,1),0);
+  const refValue = orderNames.length ? (dims[orderNames[0]].value||0) : 0;
+  const customValue = customBoards.reduce((s,b)=>s+pieceValue(b.width,b.t,L,1,refValue),0);
+  totalValue += customValue;
   customBoards.forEach(b=>{ totalArea += b.width*b.t; });
   const areaUtilPct2 = smallEndArea>0 ? Math.round(100*totalArea/smallEndArea) : 0;
   const yieldPct2 = logVolume>0 ? Math.round(100*(totalBF+bonusBF+customBF)/logVolume) : 0;
@@ -687,7 +811,7 @@ function runHardwood(){
     totalCounts, bonusCounts, totalBF:Math.round(totalBF), bonusBF:Math.round(bonusBF),
     customBoards, customBF:Math.round(customBF), southPocket,
     yieldPct:Math.min(yieldPct2,100), areaUtilPct:Math.min(areaUtilPct2,100),
-    placements, dL,dS,L,bow,kerf, envelope};
+    placements, dL,dS,L,bow,kerf, envelope, totalValue: Math.round(totalValue)};
 }
 
 function runResults(){
@@ -747,6 +871,26 @@ function loadSettings(){
   }catch(e){}
 }
 
+// Remembers the last log's measurements (large/small diameter, length, bow, species) across
+// sessions, separately from Settings, since these change per-log rather than being fixed shop
+// defaults.
+function saveLog(){
+  try{ localStorage.setItem('millplan-log', JSON.stringify(state.log)); }catch(e){}
+}
+
+function loadLog(){
+  try{
+    const raw = localStorage.getItem('millplan-log');
+    if(!raw) return;
+    const parsed = JSON.parse(raw);
+    if(!parsed) return;
+    ['largeDia','smallDia','length','bow'].forEach(k=>{
+      if(typeof parsed[k]==='number') state.log[k]=parsed[k];
+    });
+    if(parsed.species==='softwood' || parsed.species==='hardwood') state.log.species = parsed.species;
+  }catch(e){}
+}
+
 function renderSettings(){
   const canSave = storageAvailable();
   const wrap = el(`<div>
@@ -758,12 +902,14 @@ function renderSettings(){
       <div class="row"><div class="field"><input type="number" step="0.0625" id="kerf-in" value="${state.settings.kerf}"><span class="unit">in</span></div></div>
     </div>
     <div class="panel">
-      <label>Softwood — actual thickness x width (in)</label>
+      <label>Softwood — actual thickness x width (in), and value</label>
       <div id="sw-dims"></div>
+      <p class="footnote" style="margin-top:8px;">$/bf values are rough starting estimates (general SPF/timber market ranges as of mid-2026) — edit them for your species, grade, and local market. They drive the "Max Yield" ranking (total dollar value, not raw board count, decides the winning combination) and the value column/log total on the Results screen.</p>
     </div>
     <div class="panel">
-      <label>Hardwood — actual thickness by quarter (in)</label>
+      <label>Hardwood — actual thickness by quarter (in), and value</label>
       <div id="hw-dims"></div>
+      <p class="footnote" style="margin-top:8px;">$/bf values are rough starting estimates — edit for your species, grade, and market. Used to compute the value column and log total on the Results screen.</p>
     </div>
   </div>`);
   wrap.querySelector('#kerf-in').oninput = e=>{ state.settings.kerf = parseFloat(e.target.value)||0; saveSettings(); };
@@ -771,23 +917,28 @@ function renderSettings(){
   const swDims = wrap.querySelector('#sw-dims');
   SOFTWOOD_ORDER.forEach(n=>{
     const d = state.settings.dims[n];
-    const row = el(`<div class="row"><div class="field"><label>${n}</label></div>
+    const row = el(`<div class="row"><div class="field" style="flex:0 0 46px;"><label>${n}</label></div>
       <div class="field"><input type="number" step="0.0625" value="${d.h}"><span class="unit">h</span></div>
       <div class="field"><input type="number" step="0.0625" value="${d.w}"><span class="unit">w</span></div>
+      <div class="field"><input type="number" step="0.05" value="${d.value||0}"><span class="unit">$/bf</span></div>
     </div>`);
-    const [hIn,wIn] = row.querySelectorAll('input');
+    const [hIn,wIn,valIn] = row.querySelectorAll('input');
     hIn.oninput=e=>{ d.h=parseFloat(e.target.value)||0; saveSettings(); };
     wIn.oninput=e=>{ d.w=parseFloat(e.target.value)||0; saveSettings(); };
+    valIn.oninput=e=>{ d.value=parseFloat(e.target.value)||0; saveSettings(); };
     swDims.appendChild(row);
   });
 
   const hwDims = wrap.querySelector('#hw-dims');
   HARDWOOD_ORDER.forEach(n=>{
     const d = state.settings.dims[n];
-    const row = el(`<div class="row"><div class="field"><label>${n}</label></div>
+    const row = el(`<div class="row"><div class="field" style="flex:0 0 46px;"><label>${n}</label></div>
       <div class="field"><input type="number" step="0.0625" value="${d.h}"><span class="unit">in thick</span></div>
+      <div class="field"><input type="number" step="0.05" value="${d.value||0}"><span class="unit">$/bf</span></div>
     </div>`);
-    row.querySelector('input').oninput=e=>{ d.h=parseFloat(e.target.value)||0; saveSettings(); };
+    const [hIn2,valIn2] = row.querySelectorAll('input');
+    hIn2.oninput=e=>{ d.h=parseFloat(e.target.value)||0; saveSettings(); };
+    valIn2.oninput=e=>{ d.value=parseFloat(e.target.value)||0; saveSettings(); };
     hwDims.appendChild(row);
   });
 
@@ -816,15 +967,15 @@ function renderLog(){
     </div>
     <label>Side profile</label>
     <canvas id="profile" width="800" height="360"></canvas>
-    <p class="footnote">Taper is linear end to end. Bow is modeled as a parabolic sweep, zero at both ends, maximum at midspan — matches how sweep is measured on a log deck.</p>
+    <p class="footnote">Taper is linear end to end. Bow is modeled as a parabolic sweep, zero at both ends, maximum at midspan — matches how sweep is measured on a log deck. These measurements are remembered in this browser, so reopening the app starts from your last log.</p>
   </div>`);
 
   const inputs = { ld:'largeDia', sd:'smallDia', ln:'length', bw:'bow' };
   Object.entries(inputs).forEach(([id,key])=>{
-    wrap.querySelector('#'+id).oninput = e=>{ state.log[key]=parseFloat(e.target.value)||0; drawProfile(wrap.querySelector('#profile')); };
+    wrap.querySelector('#'+id).oninput = e=>{ state.log[key]=parseFloat(e.target.value)||0; drawProfile(wrap.querySelector('#profile')); saveLog(); };
   });
-  wrap.querySelector('#sw-btn').onclick=()=>{ state.log.species='softwood'; renderAll(); };
-  wrap.querySelector('#hw-btn').onclick=()=>{ state.log.species='hardwood'; renderAll(); };
+  wrap.querySelector('#sw-btn').onclick=()=>{ state.log.species='softwood'; saveLog(); renderAll(); };
+  wrap.querySelector('#hw-btn').onclick=()=>{ state.log.species='hardwood'; saveLog(); renderAll(); };
 
   setTimeout(()=>drawProfile(wrap.querySelector('#profile')),0);
   return wrap;
@@ -842,7 +993,7 @@ function drawProfile(canvas){
   const midY = H/2;
 
   ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--line');
-  ctx.lineWidth=1;
+  ctx.lineWidth=2;
   const nTop=[], nBot=[];
   const N=60;
   for(let i=0;i<=N;i++){
@@ -857,15 +1008,16 @@ function drawProfile(canvas){
   nTop.forEach(([x,y],i)=> i===0? ctx.moveTo(x,y):ctx.lineTo(x,y));
   for(let i=nBot.length-1;i>=0;i--) ctx.lineTo(nBot[i][0],nBot[i][1]);
   ctx.closePath();
-  ctx.fillStyle = '#d9915022';
+  ctx.fillStyle = '#d9915055';
   ctx.fill();
-  ctx.strokeStyle = '#d99150aa';
+  ctx.strokeStyle = '#e8a35f';
+  ctx.lineWidth=2.5;
   ctx.stroke();
 
   // pith centerline
   ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--chalk');
   ctx.setLineDash([4,4]);
-  ctx.lineWidth=1;
+  ctx.lineWidth=2;
   ctx.beginPath();
   for(let i=0;i<=N;i++){
     const x=L*i/N; const y=bowOffset(x,L,bow);
@@ -875,14 +1027,18 @@ function drawProfile(canvas){
   ctx.stroke();
   ctx.setLineDash([]);
 
-  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text-dim');
-  ctx.font='11px IBM Plex Mono';
+  function lbl(text,x,y){
+    ctx.lineWidth=3; ctx.strokeStyle='#0a1319'; ctx.strokeText(text,x,y);
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text');
+    ctx.fillText(text,x,y);
+  }
+  ctx.font='bold 13px IBM Plex Mono';
   ctx.textAlign='center';
-  ctx.fillText(`length ${fmt(L,0)} in`, W/2, H-24);
+  lbl(`length ${fmt(L,0)} in`, W/2, H-24);
   ctx.textAlign='left';
-  ctx.fillText(`${fmt(dL,1)}" `, pad-4, midY-(dL/2)*scaleY-8);
-  ctx.fillText(`${fmt(dS,1)}" `, W-pad-4, midY-bowOffset(L,L,bow)*scaleY-(dS/2)*scaleY-8);
-  ctx.fillText(`bow ${fmt(bow,2)}"`, W/2-20, midY-bowOffset(L/2,L,bow)*scaleY-10);
+  lbl(`${fmt(dL,1)}" `, pad-4, midY-(dL/2)*scaleY-8);
+  lbl(`${fmt(dS,1)}" `, W-pad-4, midY-bowOffset(L,L,bow)*scaleY-(dS/2)*scaleY-8);
+  lbl(`bow ${fmt(bow,2)}"`, W/2-20, midY-bowOffset(L/2,L,bow)*scaleY-10);
 }
 
 // ---------- Species screen ----------
@@ -895,7 +1051,9 @@ function renderSoftwoodOptions(){
   const wrap = el(`<div>
     <h2>Softwood mix</h2>
     <p class="sub">Pick sizes, set a target mix, add beams if needed. Dimensions come from Settings.</p>
-    <div class="panel"><label>Board sizes and mix (%)</label><div id="sw-list"></div></div>
+    <div class="panel"><label>Board sizes and mix (%)</label><div id="sw-list"></div>
+      <p class="footnote" style="margin-top:8px;">% only balances sizes that share the exact same actual width (e.g. 1x6 and 2x6, both 5.625" — that's a resaw-thickness choice within one cant segment). Different widths (e.g. 2x4 vs 2x6) each get their own segment of the cant instead, sized by the combination search — percent doesn't move material between them. Leaving % at 0 for a size you've checked just fills it evenly alongside the others sharing its width, using whatever's left after any sizes with a set %.</p>
+    </div>
     <div class="panel">
       <div class="row" style="justify-content:space-between;align-items:center;">
         <label style="margin:0;">Beams (max 2)</label>
@@ -936,23 +1094,25 @@ function renderSoftwoodOptions(){
         <div class="field"><label>Width</label><input type="number" step="0.0625" value="${b.w}"></div>
         <div class="field"><label>Height</label><input type="number" step="0.0625" value="${b.h}"></div>
       </div>
+      <div class="row"><div class="field"><label>Value</label><input type="number" step="0.05" value="${b.value ?? 1.20}"><span class="unit">$/bf</span></div></div>
       <div class="seg">
         <button class="${b.placement==='boxed'?'active':''}" data-p="boxed">Boxed heart</button>
         <button class="${b.placement==='fohc'?'active':''}" data-p="fohc">Free of heart center</button>
       </div>
     </div>`);
     card.querySelector('.btn.danger').onclick=()=>{ sw.beams.splice(i,1); renderAll(); };
-    const [wIn,hIn] = card.querySelectorAll('input');
+    const [wIn,hIn,valIn] = card.querySelectorAll('input');
     wIn.oninput=e=>b.w=parseFloat(e.target.value)||0;
     hIn.oninput=e=>b.h=parseFloat(e.target.value)||0;
+    valIn.oninput=e=>b.value=parseFloat(e.target.value)||0;
     card.querySelectorAll('[data-p]').forEach(btn=>btn.onclick=()=>{ b.placement=btn.dataset.p; renderAll(); });
     beamList.appendChild(card);
   });
 
   wrap.querySelector('#add-beam').onclick=()=>{
-    if(sw.beams.length<2){ sw.beams.push({w:8,h:4,placement:'boxed'}); renderAll(); }
+    if(sw.beams.length<2){ sw.beams.push({w:8,h:4,placement:'boxed',value:1.20}); renderAll(); }
   };
-  wrap.querySelector('#kerf-ov').oninput=e=>{ sw.kerfOverride=parseFloat(e.target.value)||0; };
+  wrap.querySelector('#kerf-ov').oninput=e=>{ sw.kerfOverride = e.target.value===''? null : (parseFloat(e.target.value)||0); };
 
   return wrap;
 }
@@ -993,7 +1153,7 @@ function renderHardwoodOptions(){
     pctIn.oninput=e=>{ hw.percents[n]=parseFloat(e.target.value)||0; };
     list.appendChild(row);
   });
-  wrap.querySelector('#kerf-ov').oninput=e=>{ hw.kerfOverride=parseFloat(e.target.value)||0; };
+  wrap.querySelector('#kerf-ov').oninput=e=>{ hw.kerfOverride = e.target.value===''? null : (parseFloat(e.target.value)||0); };
 
   return wrap;
 }
@@ -1008,7 +1168,8 @@ function renderResults(){
     ${state.log.species==='softwood' ? `<div class="rangebtn">
       <button class="btn ${state.resultMode==='max'?'primary':''}" id="mode-max">Max yield</button>
       <button class="btn ${state.resultMode==='mix'?'primary':''}" id="mode-mix">Your mix</button>
-    </div>` : ''}
+    </div>
+    <p class="footnote" style="margin-top:-10px;margin-bottom:16px;">${state.resultMode==='max' ? 'Max Yield searches every width combination independent of your % targets, and picks whichever produces the highest total dollar value using the $/bf figures in Settings.' : 'Your Mix uses only the sizes and percentages you set on the Boards screen.'}</p>` : ''}
     <label>Board layout</label>
     <canvas id="xsec" width="800" height="620"></canvas>
     <div id="legend" style="display:flex;flex-wrap:wrap;gap:10px 16px;margin:10px 0 4px;"></div>
@@ -1016,7 +1177,10 @@ function renderResults(){
       <div class="stat"><div class="label">Yield</div><div class="val">${r.yieldPct}%</div></div>
       <div class="stat"><div class="label">Board feet</div><div class="val">${r.totalBF + (r.bonusBF||0) + (r.beamBF||0) + (r.customBF||0)}</div></div>
     </div>
-    <div class="stat" style="margin-bottom:14px;"><div class="label">Small-end area used</div><div class="val">${r.areaUtilPct}%</div></div>
+    <div class="statgrid" style="margin-bottom:14px;">
+      <div class="stat"><div class="label">Small-end area used</div><div class="val">${r.areaUtilPct}%</div></div>
+      <div class="stat"><div class="label">Est. value</div><div class="val">$${r.totalValue||0}</div></div>
+    </div>
     <p class="sub" style="margin:2px 0 0;">${r.bonusBF>0 ? `Includes ${r.bonusBF} bf recovered from leftover space in sizes you didn't select.` : ''}</p>
     <div id="warnings"></div>
     <div id="cutlist"></div>
@@ -1054,15 +1218,22 @@ function renderResults(){
   }
 
   const cutlist = wrap.querySelector('#cutlist');
+  const dims = state.settings.dims;
   if(r.species==='softwood'){
     const table = document.createElement('table');
-    let rowsHtml = '<tr><th>Piece</th><th>Length</th><th>Qty</th></tr>';
+    let rowsHtml = '<tr><th>Piece</th><th>Length</th><th>Qty</th><th>Value</th></tr>';
+    let mainValueSum = 0;
     r.beamResults.filter(b=>b.fits).forEach(b=>{
-      rowsHtml += `<tr><td>Beam ${fmt(b.w,3)}"x${fmt(b.h,3)}"</td><td>${fmt(r.L/12,1)} ft</td><td>1</td></tr>`;
+      const v = pieceValue(b.w,b.h,r.L,1,b.value ?? 1.20); mainValueSum += v;
+      rowsHtml += `<tr><td>Beam ${fmt(b.w,3)}"x${fmt(b.h,3)}"</td><td>${fmt(r.L/12,1)} ft</td><td>1</td><td>$${fmt(v,0)}</td></tr>`;
     });
     Object.entries(r.totalCounts).forEach(([name,count])=>{
-      if(count>0) rowsHtml += `<tr><td>${name}</td><td>${fmt(r.L/12,1)} ft</td><td>${Math.round(count)}</td></tr>`;
+      if(count>0){
+        const v = pieceValue(dims[name].w,dims[name].h,r.L,count,dims[name].value); mainValueSum += v;
+        rowsHtml += `<tr><td>${name}</td><td>${fmt(r.L/12,1)} ft</td><td>${Math.round(count)}</td><td>$${fmt(v,0)}</td></tr>`;
+      }
     });
+    rowsHtml += `<tr><td style="font-weight:600;">Total</td><td></td><td></td><td style="font-weight:600;">$${fmt(mainValueSum,0)}</td></tr>`;
     table.innerHTML = rowsHtml;
     cutlist.appendChild(table);
 
@@ -1070,10 +1241,15 @@ function renderResults(){
     if(hasBonus){
       cutlist.appendChild(el(`<label style="margin-top:16px;display:block;">Additional recoverable (not in your mix)</label>`));
       const bt = document.createElement('table');
-      let bRows = '<tr><th>Piece</th><th>Length</th><th>Qty</th></tr>';
+      let bRows = '<tr><th>Piece</th><th>Length</th><th>Qty</th><th>Value</th></tr>';
+      let bonusValueSum = 0;
       Object.entries(r.bonusCounts).forEach(([name,count])=>{
-        if(count>0) bRows += `<tr><td>${name}</td><td>${fmt(r.L/12,1)} ft</td><td>${Math.round(count)}</td></tr>`;
+        if(count>0){
+          const v = pieceValue(dims[name].w,dims[name].h,r.L,count,dims[name].value); bonusValueSum += v;
+          bRows += `<tr><td>${name}</td><td>${fmt(r.L/12,1)} ft</td><td>${Math.round(count)}</td><td>$${fmt(v,0)}</td></tr>`;
+        }
       });
+      bRows += `<tr><td style="font-weight:600;">Total</td><td></td><td></td><td style="font-weight:600;">$${fmt(bonusValueSum,0)}</td></tr>`;
       bt.innerHTML = bRows;
       cutlist.appendChild(bt);
     }
@@ -1081,30 +1257,40 @@ function renderResults(){
     const cantRows = [];
     if(r.mainCant) cantRows.push({name:'Main cant', w:r.mainCant.W, h:r.mainCant.H});
     else if(r.beamEnvelope) cantRows.push({name:'Main cant (beam)', w:r.beamEnvelope.Wb, h:r.beamEnvelope.Hb});
-    const cantNameMap = {top:'North cant', right:'East cant', bottom:'South cant', left:'West cant'};
+    const wingNameMap = {top:'North wing', right:'East wing', bottom:'South wing', left:'West wing'};
     ['top','right','bottom','left'].forEach(key=>{
-      const z = (r.wingResults||[]).find(zn=>zn.name===key);
-      if(z && z.W>=0.3 && z.H>=0.3) cantRows.push({name:cantNameMap[key], w:z.W, h:z.H});
+      const summary = wingSideSummary((r.wingResults && r.wingResults[key]) || []);
+      if(summary) cantRows.push({name:`${wingNameMap[key]} (${summary.count} bd)`, w:summary.w, h:summary.h});
     });
     if(cantRows.length){
-      cutlist.appendChild(el(`<label style="margin-top:16px;display:block;">Cant sizes</label>`));
+      cutlist.appendChild(el(`<label style="margin-top:16px;display:block;">Cant / wing footprint</label>`));
       const ct = document.createElement('table');
-      let cRows = '<tr><th>Cant</th><th>Width</th><th>Height</th></tr>';
+      let cRows = '<tr><th>Zone</th><th>Width</th><th>Height</th></tr>';
       cantRows.forEach(cr=>{
         cRows += `<tr><td>${cr.name}</td><td>${fmt(cr.w,2)}"</td><td>${fmt(cr.h,2)}"</td></tr>`;
       });
       ct.innerHTML = cRows;
       cutlist.appendChild(ct);
     }
+    if(r.noFitRect){
+      warn.appendChild(el(`<div class="warn">No selected board or beam combination fits this log. The largest rectangle the log geometrically allows is ${fmt(r.noFitRect.W,2)}" x ${fmt(r.noFitRect.H,2)}" — shown as a guide on the diagram. Try selecting sizes at or under that.</div>`));
+    }
   } else {
     if(!r.fits){
-      warn.appendChild(el(`<div class="warn">A ${fmt(r.W,2)}" wide cant doesn't fit this log at all — reduce the desired board width or check the log dimensions.</div>`));
+      let msg = `A ${fmt(r.W,2)}" wide cant doesn't fit this log at all — reduce the desired board width or check the log dimensions.`;
+      if(r.noFitRect) msg += ` The largest rectangle this log geometrically allows is ${fmt(r.noFitRect.W,2)}" x ${fmt(r.noFitRect.H,2)}" — shown as a guide on the diagram.`;
+      warn.appendChild(el(`<div class="warn">${msg}</div>`));
     }
     const table = document.createElement('table');
-    let rowsHtml = '<tr><th>Thickness</th><th>Width</th><th>Qty</th></tr>';
+    let rowsHtml = '<tr><th>Thickness</th><th>Width</th><th>Qty</th><th>Value</th></tr>';
+    let hwMainValueSum = 0;
     HARDWOOD_ORDER.forEach(n=>{
-      if(r.totalCounts[n]>0) rowsHtml += `<tr><td>${n}</td><td>${fmt(r.W,2)}"</td><td>${r.totalCounts[n]}</td></tr>`;
+      if(r.totalCounts[n]>0){
+        const v = pieceValue(r.W,dims[n].h,r.L,r.totalCounts[n],dims[n].value); hwMainValueSum += v;
+        rowsHtml += `<tr><td>${n}</td><td>${fmt(r.W,2)}"</td><td>${r.totalCounts[n]}</td><td>$${fmt(v,0)}</td></tr>`;
+      }
     });
+    rowsHtml += `<tr><td style="font-weight:600;">Total</td><td></td><td></td><td style="font-weight:600;">$${fmt(hwMainValueSum,0)}</td></tr>`;
     table.innerHTML = rowsHtml;
     cutlist.appendChild(table);
 
@@ -1112,10 +1298,15 @@ function renderResults(){
     if(hwHasBonus){
       cutlist.appendChild(el(`<label style="margin-top:16px;display:block;">Additional recoverable (not in your mix)</label>`));
       const bt = document.createElement('table');
-      let bRows = '<tr><th>Thickness</th><th>Width</th><th>Qty</th></tr>';
+      let bRows = '<tr><th>Thickness</th><th>Width</th><th>Qty</th><th>Value</th></tr>';
+      let hwBonusValueSum = 0;
       HARDWOOD_ORDER.forEach(n=>{
-        if(r.bonusCounts[n]>0) bRows += `<tr><td>${n}</td><td>${fmt(r.W,2)}"</td><td>${r.bonusCounts[n]}</td></tr>`;
+        if(r.bonusCounts[n]>0){
+          const v = pieceValue(r.W,dims[n].h,r.L,r.bonusCounts[n],dims[n].value); hwBonusValueSum += v;
+          bRows += `<tr><td>${n}</td><td>${fmt(r.W,2)}"</td><td>${r.bonusCounts[n]}</td><td>$${fmt(v,0)}</td></tr>`;
+        }
       });
+      bRows += `<tr><td style="font-weight:600;">Total</td><td></td><td></td><td style="font-weight:600;">$${fmt(hwBonusValueSum,0)}</td></tr>`;
       bt.innerHTML = bRows;
       cutlist.appendChild(bt);
     }
@@ -1123,13 +1314,21 @@ function renderResults(){
     if(r.southPocket && (Object.values(r.southPocket.primaryCounts).some(v=>v>0) || Object.values(r.southPocket.bonusCounts).some(v=>v>0))){
       cutlist.appendChild(el(`<label style="margin-top:16px;display:block;">South cant — ${fmt(r.southPocket.W,2)}" wide</label>`));
       const st = document.createElement('table');
-      let sRows = '<tr><th>Thickness</th><th>Width</th><th>Qty</th></tr>';
+      let sRows = '<tr><th>Thickness</th><th>Width</th><th>Qty</th><th>Value</th></tr>';
+      let southValueSum = 0;
       HARDWOOD_ORDER.forEach(n=>{
-        if(r.southPocket.primaryCounts[n]>0) sRows += `<tr><td>${n}</td><td>${fmt(r.southPocket.W,2)}"</td><td>${r.southPocket.primaryCounts[n]}</td></tr>`;
+        if(r.southPocket.primaryCounts[n]>0){
+          const v = pieceValue(r.southPocket.W,dims[n].h,r.L,r.southPocket.primaryCounts[n],dims[n].value); southValueSum += v;
+          sRows += `<tr><td>${n}</td><td>${fmt(r.southPocket.W,2)}"</td><td>${r.southPocket.primaryCounts[n]}</td><td>$${fmt(v,0)}</td></tr>`;
+        }
       });
       HARDWOOD_ORDER.forEach(n=>{
-        if(r.southPocket.bonusCounts[n]>0) sRows += `<tr><td>${n} (extra)</td><td>${fmt(r.southPocket.W,2)}"</td><td>${r.southPocket.bonusCounts[n]}</td></tr>`;
+        if(r.southPocket.bonusCounts[n]>0){
+          const v = pieceValue(r.southPocket.W,dims[n].h,r.L,r.southPocket.bonusCounts[n],dims[n].value); southValueSum += v;
+          sRows += `<tr><td>${n} (extra)</td><td>${fmt(r.southPocket.W,2)}"</td><td>${r.southPocket.bonusCounts[n]}</td><td>$${fmt(v,0)}</td></tr>`;
+        }
       });
+      sRows += `<tr><td style="font-weight:600;">Total</td><td></td><td></td><td style="font-weight:600;">$${fmt(southValueSum,0)}</td></tr>`;
       st.innerHTML = sRows;
       cutlist.appendChild(st);
     }
@@ -1138,13 +1337,22 @@ function renderResults(){
       cutlist.appendChild(el(`<label style="margin-top:16px;display:block;">Milling preference — max-width passes</label>`));
       const mt = document.createElement('table');
       const sideNameMap = {top:'Top', east:'East', west:'West'};
-      let mRows = '<tr><th>Pass</th><th>Width x Thick</th><th>Length</th></tr>';
+      let mRows = '<tr><th>Pass</th><th>Width x Thick</th><th>Length</th><th>Value</th></tr>';
+      const refName = (function(){
+        const dimsNow = state.settings.dims;
+        for(const n of HARDWOOD_ORDER){ if(state.hardwood.selected[n]) return n; }
+        return null;
+      })();
+      const refVal = refName ? (dims[refName].value||0) : 0;
+      let customValueSum = 0;
       r.customBoards.forEach(b=>{
-        mRows += `<tr><td>${sideNameMap[b.side]}</td><td>${fmt(b.width,2)}"x${fmt(b.t,3)}"</td><td>${fmt(r.L/12,1)} ft</td></tr>`;
+        const v = pieceValue(b.width,b.t,r.L,1,refVal); customValueSum += v;
+        mRows += `<tr><td>${sideNameMap[b.side]}</td><td>${fmt(b.width,2)}"x${fmt(b.t,3)}"</td><td>${fmt(r.L/12,1)} ft</td><td>$${fmt(v,0)}</td></tr>`;
       });
+      mRows += `<tr><td style="font-weight:600;">Total</td><td></td><td></td><td style="font-weight:600;">$${fmt(customValueSum,0)}</td></tr>`;
       mt.innerHTML = mRows;
       cutlist.appendChild(mt);
-      cutlist.appendChild(el(`<p class="footnote" style="margin-top:6px;">Live edge trimmed, each pass left at its true maximum width — trim further to your desired width whenever you're ready. Top: fixed 2 passes. East/west: pass count derived from the cant's own height, following your open-cut / rotate CCW / rotate 180 sequence.</p>`));
+      cutlist.appendChild(el(`<p class="footnote" style="margin-top:6px;">Live edge trimmed, each pass left at its true maximum width — trim further to your desired width whenever you're ready. Top: fixed 2 passes. East/west: pass count derived from the cant's own height, following your open-cut / rotate CCW / rotate 180 sequence. Value uses the highest-priority selected thickness's $/bf.</p>`));
     }
 
     if(r.fits){
@@ -1160,7 +1368,7 @@ function renderResults(){
   }
 
   const foot = el(`<p class="footnote">${r.species==='softwood' ?
-    `Prototype notes: fixed full-length boards only, straight sawing (no sweep-following). Cant width is the sum of your selected board widths plus kerf; height is the max the log allows for that width. Wing pockets (top/bottom/left/right) are searched independently for their own best size and position. Boards are tried both flat and on-edge (rotated) per pocket, whichever fits. The dashed line marks the cant and pocket boundaries; solid colored pieces are your requested mix; dash-bordered pieces are extra sizes recovered from leftover space.` :
+    `Prototype notes: fixed full-length boards only, straight sawing (no sweep-following). Cant width is the sum of your selected board widths plus kerf; height is the max the log allows for that width. Wings grow outward course-by-course from the cant in all four directions — each step takes the widest preselected size that still fits, stepping down as the log narrows, until nothing selected fits and (in Max Yield) it's the $/bf value in Settings, not raw board count, that decides which width combination and which size gets priority. The dashed line marks the cant boundary; solid colored pieces are your requested mix; dash-bordered pieces are extra sizes recovered from leftover space.` :
     `Prototype notes: fixed full-length boards only, straight sawing (no sweep-following). Cant width is your desired board width; height is the max the log allows for that width, resawn by thickness. Top/east/west max-width passes follow your rotate-and-square process, trimmed to the true geometric maximum rather than a fixed size — south is not yet recovered.`}
     Board layout shown at one representative cross-section — every board runs the log's full length. All figures rounded to whole numbers.</p>`);
   wrap.appendChild(foot);
@@ -1184,40 +1392,57 @@ function drawCrossSection(canvas, r){
   const circleCy = cy - env.y*scale;
 
   ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--line');
-  ctx.lineWidth=1;
+  ctx.lineWidth=2;
   ctx.beginPath(); ctx.arc(cx,circleCy,R,0,Math.PI*2); ctx.stroke();
   ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--line-dim');
   ctx.setLineDash([3,4]);
+  ctx.lineWidth=1.5;
   ctx.beginPath(); ctx.moveTo(cx-R-10,circleCy); ctx.lineTo(cx+R+10,circleCy); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(cx,circleCy-R-10); ctx.lineTo(cx,circleCy+R+10); ctx.stroke();
   ctx.setLineDash([]);
 
+  function labelWithOutline(label, x, y, size){
+    ctx.font=`bold ${size}px IBM Plex Mono`; ctx.textAlign='center';
+    ctx.lineWidth=3.5; ctx.strokeStyle='#0a1319'; ctx.strokeText(label,x,y);
+    ctx.fillText(label,x,y);
+  }
+
   function rect(wIn,hIn,cxIn,cyIn,color,label,labelColor){
     const w=wIn*scale, h=hIn*scale;
     const x=cx+cxIn*scale-w/2, y=cy-cyIn*scale-h/2;
-    ctx.fillStyle=color+'55'; ctx.fillRect(x,y,w,h);
-    ctx.strokeStyle=color; ctx.lineWidth=1; ctx.strokeRect(x,y,w,h);
+    ctx.fillStyle=color+'99'; ctx.fillRect(x,y,w,h);
+    ctx.strokeStyle=color; ctx.lineWidth=2.5; ctx.strokeRect(x,y,w,h);
     if(label && w>60 && h>26){
       ctx.fillStyle=labelColor || getComputedStyle(document.documentElement).getPropertyValue('--text');
-      ctx.font='bold 20px IBM Plex Mono'; ctx.textAlign='center';
-      ctx.fillText(label, x+w/2, y+h/2+7);
+      labelWithOutline(label, x+w/2, y+h/2+7, 20);
+    }
+  }
+
+  function rectAt(w,h,x,y,color,name,rotated,bonus){
+    ctx.fillStyle=color+'99'; ctx.fillRect(x,y,w,h);
+    ctx.strokeStyle=color; ctx.lineWidth=2;
+    if(bonus) ctx.setLineDash([3,3]); else ctx.setLineDash([]);
+    ctx.strokeRect(x,y,w,h);
+    ctx.setLineDash([]);
+    if(w>50 && h>24){
+      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text');
+      const lbl = rotated ? name+'\u21bb' : name;
+      labelWithOutline(lbl, x+w/2, y+h/2+6, 18);
     }
   }
 
   function rectPlacement(p,color){
     const w=p.width*scale, h=p.height*scale;
     const x=p._cx*scale+cx-w/2, y=cy-p._cy*scale-h/2;
-    ctx.fillStyle=color+'55'; ctx.fillRect(x,y,w,h);
-    ctx.strokeStyle=color; ctx.lineWidth=1;
-    if(p.bonus) ctx.setLineDash([2,2]); else ctx.setLineDash([]);
-    ctx.strokeRect(x,y,w,h);
-    ctx.setLineDash([]);
-    if(w>50 && h>24){
-      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text');
-      ctx.font='bold 18px IBM Plex Mono'; ctx.textAlign='center';
-      const lbl = p.rotated ? p.name+'\u21bb' : p.name;
-      ctx.fillText(lbl, x+w/2, y+h/2+6);
-    }
+    rectAt(w,h,x,y,color,p.name,p.rotated,p.bonus);
+  }
+
+  // Absolute-coordinate placement (used for the softwood wing growth courses, which aren't
+  // confined to one pre-sized pocket rectangle the way the old zone model was).
+  function rectAbs(p,color){
+    const w=p.width*scale, h=p.height*scale;
+    const x=cx+p.cxIn*scale-w/2, y=cy-p.cyIn*scale-h/2;
+    rectAt(w,h,x,y,color,p.name,p.rotated,p.bonus);
   }
 
   function dashedOutline(zoneCxIn, zoneCyIn, zoneW, zoneH){
@@ -1225,7 +1450,7 @@ function drawCrossSection(canvas, r){
     const w=zoneW*scale, h=zoneH*scale;
     const x=cx+zoneCxIn*scale-w/2, y=cy-zoneCyIn*scale-h/2;
     ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--chalk');
-    ctx.setLineDash([5,4]); ctx.lineWidth=1;
+    ctx.setLineDash([6,5]); ctx.lineWidth=1.75;
     ctx.strokeRect(x,y,w,h);
     ctx.setLineDash([]);
   }
@@ -1257,9 +1482,8 @@ function drawCrossSection(canvas, r){
         rect(b.w,b.h,0,b.c,'#d99150',`${fmt(b.w,2)}x${fmt(b.h,2)}`,'#1a1006');
       });
     }
-    r.wingResults.forEach(z=>{
-      if(z.W<0.3||z.H<0.3) return;
-      drawZone(z.cxIn, z.cyIn, z.W, z.H, z.placements, SOFTWOOD_ORDER);
+    ['top','bottom','left','right'].forEach(side=>{
+      (r.wingResults[side]||[]).forEach(p=> rectAbs(p, paletteColor(p.name, SOFTWOOD_ORDER)));
     });
     if(r.segments && r.segments.length){
       if(r.mainCant) dashedOutline(0, r.mainCant.c, r.mainCant.W, r.mainCant.H);
@@ -1267,12 +1491,26 @@ function drawCrossSection(canvas, r){
         drawZone(seg.cxIn, seg.cyIn, seg.width, r.mainCant.H, seg.packed.placements, SOFTWOOD_ORDER);
       });
     }
+    if(r.noFitRect){
+      dashedOutline(0, r.noFitRect.c, r.noFitRect.W, r.noFitRect.H);
+      const w=r.noFitRect.W*scale, h=r.noFitRect.H*scale;
+      const x=cx-w/2, y=cy-r.noFitRect.c*scale-h/2;
+      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--chalk');
+      labelWithOutline(`max: ${fmt(r.noFitRect.W,1)}"x${fmt(r.noFitRect.H,1)}"`, x+w/2, y+h/2+6, 18);
+    }
   } else {
     if(r.fits){
       drawZone(0, r.cantC, r.W, r.cantH, r.placements, HARDWOOD_ORDER);
     }
     if(r.southPocket){
       drawZone(r.southPocket.cxIn, r.southPocket.cyIn, r.southPocket.W, r.southPocket.H, r.southPocket.placements, HARDWOOD_ORDER);
+    }
+    if(r.noFitRect){
+      dashedOutline(0, r.noFitRect.c, r.noFitRect.W, r.noFitRect.H);
+      const w=r.noFitRect.W*scale, h=r.noFitRect.H*scale;
+      const x=cx-w/2, y=cy-r.noFitRect.c*scale-h/2;
+      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--chalk');
+      labelWithOutline(`max: ${fmt(r.noFitRect.W,1)}"x${fmt(r.noFitRect.H,1)}"`, x+w/2, y+h/2+6, 18);
     }
     function customBoardLabel(b){
       const dims = state.settings.dims;
@@ -1287,14 +1525,13 @@ function drawCrossSection(canvas, r){
       const hIn = b.side==='top' ? b.t : b.width;
       const w=wIn*scale, h=hIn*scale;
       const x=cx+b.cxIn*scale-w/2, y=cy-b.cyIn*scale-h/2;
-      ctx.strokeStyle = '#6bb1b8'; ctx.lineWidth=1.5;
+      ctx.strokeStyle = '#6bb1b8'; ctx.lineWidth=2.5;
       ctx.strokeRect(x,y,w,h);
       const label = customBoardLabel(b);
       if(b.side==='top'){
         if(w>18 && h>18){
           ctx.fillStyle = '#6bb1b8';
-          ctx.font='bold 12px IBM Plex Mono'; ctx.textAlign='center';
-          ctx.fillText(label, x+w/2, y+h/2+4);
+          labelWithOutline(label, x+w/2, y+h/2+4, 12);
         }
       } else {
         if(w>18 && h>28){
@@ -1302,8 +1539,7 @@ function drawCrossSection(canvas, r){
           ctx.translate(x+w/2, y+h/2);
           ctx.rotate(-Math.PI/2);
           ctx.fillStyle = '#6bb1b8';
-          ctx.font='bold 18px IBM Plex Mono'; ctx.textAlign='center';
-          ctx.fillText(label, 0, 6);
+          labelWithOutline(label, 0, 6, 18);
           ctx.restore();
         }
       }
@@ -1335,6 +1571,7 @@ if ('serviceWorker' in navigator) {
 
 document.getElementById('eyebrow').textContent = `Sawmill planner — ${APP_VERSION}`;
 loadSettings();
+loadLog();
 renderAll();
 </script>
 </body>
