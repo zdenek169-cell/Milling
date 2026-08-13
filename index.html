@@ -39,6 +39,7 @@ label{display:block;font-size:11px;font-family:'IBM Plex Mono',monospace;letter-
 .field{flex:1;}
 input[type=number],input[type=text]{width:100%;background:var(--panel2);border:0.5px solid var(--line);color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:15px;padding:9px 10px;border-radius:var(--radius);}
 input[type=number]:focus,input[type=text]:focus{outline:none;border-color:var(--amber);}
+input[type=range]{width:100%;accent-color:var(--amber);}
 .unit{color:var(--text-dim);font-size:12px;margin-left:6px;}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
 .seg{display:flex;border:0.5px solid var(--line);border-radius:var(--radius);overflow:hidden;}
@@ -92,9 +93,9 @@ table td:last-child,table th:last-child{text-align:right;}
 // that specific engine's logic changes, so you can tell at a glance which plan you're
 // looking at came from which version of the math. Softwood is locked as of sw-3 —
 // changes from here on should only touch hardwood unless you say otherwise.
-const APP_VERSION = 'v12';
-const SOFTWOOD_VERSION = 'sw-4';
-const HARDWOOD_VERSION = 'hw-7';
+const APP_VERSION = 'v13';
+const SOFTWOOD_VERSION = 'sw-5';
+const HARDWOOD_VERSION = 'hw-8';
 
 // Rough starting $/board-foot estimates for softwood, seeded from general SPF/timber market
 // ranges (framing lumber ~$0.7-1.1/bf, 1x appearance boards run a bit higher per bf, and
@@ -112,7 +113,7 @@ const state = {
       '4/4':{h:1.0,value:3.00}, '5/4':{h:1.25,value:3.20}, '6/4':{h:1.5,value:3.40}, '8/4':{h:2.0,value:3.75}
     }
   },
-  log: { largeDia:16, smallDia:12, length:120, bow:1, species:'softwood' },
+  log: { largeDia:16, smallDia:12, length:120, bow:1, bowPeak:50, species:'softwood' },
   softwood: {
     selected: {'2x4':true,'2x6':true,'1x6':false,'1x8':false,'2x8':false,'2x10':false,'1x4':false,'1x10':false,'4x4':false,'6x6':false,'8x8':false},
     percents: {'2x4':40,'2x6':60},
@@ -134,7 +135,18 @@ const HARDWOOD_ORDER = ['4/4','5/4','6/4','8/4'];
 
 // ---------- geometry / algorithm ----------
 function taperDia(x,L,dL,dS){ return dL - (dL-dS)*(x/L); }
-function bowOffset(x,L,bow){ return 4*bow*(x/L)*(1-x/L); }
+// Apex position of the bow along the length, as a fraction from the large end. Every entry
+// point (planners, profile, layout, 3D view) sets this from state/results before geometry
+// runs, so plans and views always use the same curve. Clamped away from the ends.
+let BOW_PEAK_FRAC = 0.5;
+function bowOffset(x,L,bow){
+  if(!bow) return 0;
+  const p = Math.min(0.9, Math.max(0.1, BOW_PEAK_FRAC)) * L;
+  // piecewise parabola: zero at both ends, peak (= bow) at p with zero slope there, so the
+  // curve stays smooth while the hump sits where it was actually measured on the log
+  const t = x<=p ? (x-p)/p : (x-p)/(L-p);
+  return bow*(1-t*t);
+}
 function sampleXs(L,n){ const xs=[]; for(let i=0;i<=n;i++) xs.push(L*i/n); return xs; }
 
 function cantMaxWidth(c,H,xs,L,dL,dS,bow){
@@ -442,6 +454,41 @@ function placeBeam(Wb,Hb,placement,xs,L,dL,dS,bow){
   return {fits:true,c};
 }
 
+// ---- Live beam-fit helpers (Boards screen). Same geometry as placeBeam, so what the
+// inline checker says always matches what the planner will conclude on the Results page.
+function beamEnvelopeFor(beams,kerf){
+  if(!beams.length) return null;
+  if(beams.length===1) return {W:beams[0].w, H:beams[0].h};
+  return {W:beams[0].w+beams[1].w+kerf, H:Math.max(beams[0].h,beams[1].h)};
+}
+
+function beamMaxWidthAt(H, placement, xs,L,dL,dS,bow){
+  if(H<=0) return 0;
+  if(placement==='boxed') return cantMaxWidth(0,H,xs,L,dL,dS,bow);
+  const cLow=-(H/2)-0.05, cHigh=bow+H/2+0.05;
+  return Math.max(cantMaxWidth(cLow,H,xs,L,dL,dS,bow), cantMaxWidth(cHigh,H,xs,L,dL,dS,bow));
+}
+
+// Largest H such that a beam wNeed wide still fits (max width shrinks as H grows, so a
+// simple bisection converges). Rounded down to 1/4" so the suggestion always really fits.
+function beamMaxHeightFor(wNeed, placement, xs,L,dL,dS,bow){
+  let lo=0, hi=Math.max(dL,dS);
+  for(let i=0;i<40;i++){
+    const mid=(lo+hi)/2;
+    if(beamMaxWidthAt(mid,placement,xs,L,dL,dS,bow) >= wNeed) lo=mid; else hi=mid;
+  }
+  return Math.floor(lo*4)/4;
+}
+
+function beamMaxSquare(placement, xs,L,dL,dS,bow){
+  let lo=0, hi=Math.max(dL,dS);
+  for(let i=0;i<40;i++){
+    const mid=(lo+hi)/2;
+    if(beamMaxWidthAt(mid,placement,xs,L,dL,dS,bow) >= mid) lo=mid; else hi=mid;
+  }
+  return Math.floor(lo*4)/4;
+}
+
 function boardFeet(w,h,L,count){ return (w*h*L*count)/144; }
 function pieceValue(w,h,L,count,perBf){ return boardFeet(w,h,L,count) * (perBf||0); }
 
@@ -540,6 +587,8 @@ function wingSideSummary(list){
 
 function runSoftwood(mode){
   const dL = Math.max(state.log.largeDia||0, 0.5), dS = Math.max(state.log.smallDia||0, 0.5), L = Math.max(state.log.length||0, 1), bow = state.log.bow||0;
+  const bowPeak = state.log.bowPeak ?? 50;
+  BOW_PEAK_FRAC = bowPeak/100;
   const xs = sampleXs(L,26);
   const kerf = Math.max(0, (state.softwood.kerfOverride ?? state.settings.kerf) || 0);
   const dims = state.settings.dims;
@@ -580,7 +629,7 @@ function runSoftwood(mode){
     const {Wb,Hb,c} = usedBeamEnvelope;
     wingResults = growAllWings(Wb,Hb,c, primaryCandidates, fallbackCandidates, kerf, xs,L,dL,dS,bow);
     const slice = findBindingSlice(c,Hb,xs,L,dL,dS,bow);
-    envelope = {r:slice.r, y:slice.y};
+    envelope = {r:slice.r, y:slice.y, x:slice.x};
   } else if(!beams.length && selectedNames.length){
     const groups = groupByWidth(selectedNames,dims);
     const {activeGroups, cant} = chooseActiveGroups(mode, groups, dims, percents, xs,L,dL,dS,bow,kerf, Math.max(bow*1.5,1));
@@ -608,7 +657,7 @@ function runSoftwood(mode){
       segments = rawSegments.map(seg=>({...seg, cyIn:actualC}));
       wingResults = growAllWings(Wt, actualH, actualC, primaryCandidates, fallbackCandidates, kerf, xs,L,dL,dS,bow);
       const slice = findBindingSlice(actualC, actualH, xs,L,dL,dS,bow);
-      envelope = {r:slice.r, y:slice.y};
+      envelope = {r:slice.r, y:slice.y, x:slice.x};
     }
   }
 
@@ -620,7 +669,7 @@ function runSoftwood(mode){
     if(best){
       noFitRect = best;
       const slice = findBindingSlice(best.c, best.H, xs,L,dL,dS,bow);
-      envelope = {r:slice.r, y:slice.y};
+      envelope = {r:slice.r, y:slice.y, x:slice.x};
     }
   }
 
@@ -657,7 +706,7 @@ function runSoftwood(mode){
     species:'softwood', mode, selectedNames, totalCounts, bonusCounts, totalBF: Math.round(totalBF), bonusBF: Math.round(bonusBF),
     beamResults, beamBF: Math.round(beamBF), mainCant, segments, wingResults, yieldPct: Math.min(yieldPct,100),
     areaUtilPct: Math.min(areaUtilPct,100),
-    kerf, dL, dS, L, bow, beamEnvelope: usedBeamEnvelope, envelope, noFitRect,
+    kerf, dL, dS, L, bow, bowPeak, beamEnvelope: usedBeamEnvelope, envelope, noFitRect,
     fits: !!(usedBeamEnvelope && !anyBeamInfeasible) || !!mainCant,
     totalValue: Math.round(totalValue)
   };
@@ -679,6 +728,8 @@ function verticalPocketHeight(innerY,direction,subW,xs,L,dL,dS,bow){
 
 function runHardwood(){
   const dL = Math.max(state.log.largeDia||0, 0.5), dS = Math.max(state.log.smallDia||0, 0.5), L = Math.max(state.log.length||0, 1), bow = state.log.bow||0;
+  const bowPeak = state.log.bowPeak ?? 50;
+  BOW_PEAK_FRAC = bowPeak/100;
   const xs = sampleXs(L,26);
   const kerf = Math.max(0, (state.hardwood.kerfOverride ?? state.settings.kerf) || 0);
   const dims = state.settings.dims;
@@ -691,11 +742,11 @@ function runHardwood(){
     const best = maxInscribedRect(xs,L,dL,dS,bow);
     if(!best) return base;
     const slice = findBindingSlice(best.c, best.H, xs,L,dL,dS,bow);
-    return {...base, noFitRect:best, envelope:{r:slice.r, y:slice.y}};
+    return {...base, noFitRect:best, envelope:{r:slice.r, y:slice.y, x:slice.x}};
   }
 
   const empty = {species:'hardwood', fits:false, W, cantH:0, cantC:0, totalCounts:{}, bonusCounts:{},
-    totalBF:0, bonusBF:0, yieldPct:0, areaUtilPct:0, placements:[], dL,dS,L,bow,kerf, totalValue:0};
+    totalBF:0, bonusBF:0, yieldPct:0, areaUtilPct:0, placements:[], dL,dS,L,bow,bowPeak,kerf, totalValue:0};
   if(!selectedNames.length || !(W>0)) return withNoFitRect(empty);
 
   const theoCant = findBestCantForWidth(W, xs, L, dL, dS, bow, Math.max(bow*1.5,1), 0.25);
@@ -771,7 +822,7 @@ function runHardwood(){
   const smallEndArea = Math.PI*Math.pow(dS/2,2);
 
   const slice = findBindingSlice(cant.c, cant.H, xs, L, dL, dS, bow);
-  const envelope = {r:slice.r, y:slice.y};
+  const envelope = {r:slice.r, y:slice.y, x:slice.x};
 
   // Milling preference: after squaring to your desired width, open the top with two passes,
   // then rotate CCW to take the east wing, then 180deg more for the west wing — each pass
@@ -811,7 +862,7 @@ function runHardwood(){
     totalCounts, bonusCounts, totalBF:Math.round(totalBF), bonusBF:Math.round(bonusBF),
     customBoards, customBF:Math.round(customBF), southPocket,
     yieldPct:Math.min(yieldPct2,100), areaUtilPct:Math.min(areaUtilPct2,100),
-    placements, dL,dS,L,bow,kerf, envelope, totalValue: Math.round(totalValue)};
+    placements, dL,dS,L,bow,bowPeak,kerf, envelope, totalValue: Math.round(totalValue)};
 }
 
 function runResults(){
@@ -884,7 +935,7 @@ function loadLog(){
     if(!raw) return;
     const parsed = JSON.parse(raw);
     if(!parsed) return;
-    ['largeDia','smallDia','length','bow'].forEach(k=>{
+    ['largeDia','smallDia','length','bow','bowPeak'].forEach(k=>{
       if(typeof parsed[k]==='number') state.log[k]=parsed[k];
     });
     if(parsed.species==='softwood' || parsed.species==='hardwood') state.log.species = parsed.species;
@@ -959,6 +1010,10 @@ function renderLog(){
         <div class="field"><label>Length</label><input type="number" step="1" id="ln" value="${state.log.length}"></div>
         <div class="field"><label>Bow</label><input type="number" step="0.125" id="bw" value="${state.log.bow}"></div>
       </div>
+      <div class="grid2 row">
+        <div class="field"><label>Bow peak position</label><input type="number" step="5" min="10" max="90" id="bp" value="${state.log.bowPeak ?? 50}"><span class="unit">% from large end</span></div>
+        <div class="field"></div>
+      </div>
       <label>Species</label>
       <div class="seg">
         <button id="sw-btn" class="${state.log.species==='softwood'?'active':''}">Softwood</button>
@@ -967,10 +1022,10 @@ function renderLog(){
     </div>
     <label>Side profile</label>
     <canvas id="profile" width="800" height="360"></canvas>
-    <p class="footnote">Taper is linear end to end. Bow is modeled as a parabolic sweep, zero at both ends, maximum at midspan — matches how sweep is measured on a log deck. These measurements are remembered in this browser, so reopening the app starts from your last log.</p>
+    <p class="footnote">Taper is linear end to end. Bow is zero at both ends and peaks at the position you set — leave it at 50% for a centered sweep, or move it toward either end for a log with an off-center hump. The dot on the centerline marks the apex. These measurements are remembered in this browser, so reopening the app starts from your last log.</p>
   </div>`);
 
-  const inputs = { ld:'largeDia', sd:'smallDia', ln:'length', bw:'bow' };
+  const inputs = { ld:'largeDia', sd:'smallDia', ln:'length', bw:'bow', bp:'bowPeak' };
   Object.entries(inputs).forEach(([id,key])=>{
     wrap.querySelector('#'+id).oninput = e=>{ state.log[key]=parseFloat(e.target.value)||0; drawProfile(wrap.querySelector('#profile')); saveLog(); };
   });
@@ -986,6 +1041,7 @@ function drawProfile(canvas){
   const W=canvas.width, H=canvas.height;
   ctx.clearRect(0,0,W,H);
   const {largeDia:dL, smallDia:dS, length:L, bow} = state.log;
+  BOW_PEAK_FRAC = (state.log.bowPeak ?? 50)/100;
   const pad=70;
   const scaleX = (W-2*pad)/L;
   const maxDia = Math.max(dL,dS,1);
@@ -1038,7 +1094,11 @@ function drawProfile(canvas){
   ctx.textAlign='left';
   lbl(`${fmt(dL,1)}" `, pad-4, midY-(dL/2)*scaleY-8);
   lbl(`${fmt(dS,1)}" `, W-pad-4, midY-bowOffset(L,L,bow)*scaleY-(dS/2)*scaleY-8);
-  lbl(`bow ${fmt(bow,2)}"`, W/2-20, midY-bowOffset(L/2,L,bow)*scaleY-10);
+  const peakX = L*Math.min(0.9, Math.max(0.1, BOW_PEAK_FRAC));
+  // apex marker on the pith centerline
+  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--chalk');
+  ctx.beginPath(); ctx.arc(pad+peakX*scaleX, midY-bowOffset(peakX,L,bow)*scaleY, 3.5, 0, Math.PI*2); ctx.fill();
+  lbl(`bow ${fmt(bow,2)}"`, pad+peakX*scaleX, midY-bowOffset(peakX,L,bow)*scaleY-12);
 }
 
 // ---------- Species screen ----------
@@ -1060,7 +1120,8 @@ function renderSoftwoodOptions(){
         <button class="btn small" id="add-beam" ${sw.beams.length>=2?'disabled':''}>+ Add beam</button>
       </div>
       <div id="beam-list"></div>
-      <p class="footnote" style="margin-top:8px;">Boxed heart centers the beam on the pith and maximizes surrounding board yield. Free of heart center offsets the beam so the pith falls outside it — more stable, smaller yield from the remaining wood.</p>
+      <p class="footnote" id="beam-max-hint" style="margin-top:8px;"></p>
+      <p class="footnote" style="margin-top:8px;">Boxed heart centers the beam on the pith and maximizes surrounding board yield. Free of heart center offsets the beam so the pith falls outside it — more stable, smaller yield from the remaining wood. Fit is checked live against the current log — no need to visit Results to find out.</p>
     </div>
     <div class="panel">
       <label>Kerf override for this log</label>
@@ -1086,10 +1147,52 @@ function renderSoftwoodOptions(){
     list.appendChild(row);
   });
 
+  // Shared geometry context for the live beam-fit checks — clamped exactly like runSoftwood
+  function beamGeomCtx(){
+    BOW_PEAK_FRAC = (state.log.bowPeak ?? 50)/100;
+    const dL=Math.max(state.log.largeDia||0,0.5), dS=Math.max(state.log.smallDia||0,0.5);
+    const L=Math.max(state.log.length||0,1), bow=state.log.bow||0;
+    return {dL,dS,L,bow, xs:sampleXs(L,26), kerf:Math.max(0,(sw.kerfOverride ?? state.settings.kerf)||0)};
+  }
+
+  const beamCards = [];
+  function updateBeamUI(){
+    const g = beamGeomCtx();
+    const hint = wrap.querySelector('#beam-max-hint');
+    if(hint) hint.textContent = `This log: largest square beam ≈ ${fmt(beamMaxSquare('boxed',g.xs,g.L,g.dL,g.dS,g.bow),2)}" boxed heart, ${fmt(beamMaxSquare('fohc',g.xs,g.L,g.dL,g.dS,g.bow),2)}" free of heart center.`;
+    if(!sw.beams.length) return;
+    const placement = sw.beams[0].placement;
+    const env = beamEnvelopeFor(sw.beams, g.kerf);
+    const availTotal = beamMaxWidthAt(env.H, placement, g.xs,g.L,g.dL,g.dS,g.bow);
+    const fits = availTotal >= env.W - 1e-9;
+    beamCards.forEach(({card,b,i})=>{
+      const stat = card.querySelector('[data-stat]');
+      if(!stat) return;
+      const others = sw.beams.filter((x,j)=>j!==i);
+      const othersW = others.reduce((s,o)=>s+o.w,0) + (others.length? g.kerf:0);
+      const maxWForThis = availTotal - othersW;
+      if(fits){
+        stat.style.color='var(--green)';
+        stat.textContent = `✓ fits this log — max width at this height ${fmt(Math.max(0,maxWForThis),2)}"`;
+      } else if(maxWForThis >= 0.5){
+        stat.style.color='var(--red)';
+        stat.textContent = `✗ doesn't fit — max width at this height ${fmt(maxWForThis,2)}" (or tap fit to log)`;
+      } else {
+        stat.style.color='var(--red)';
+        const needW = othersW + Math.min(b.w,1);
+        stat.textContent = `✗ too tall — max height here ≈ ${fmt(beamMaxHeightFor(needW, placement, g.xs,g.L,g.dL,g.dS,g.bow),2)}" (or tap fit to log)`;
+      }
+    });
+  }
+
   const beamList = wrap.querySelector('#beam-list');
   sw.beams.forEach((b,i)=>{
     const card = el(`<div class="beamcard">
-      <div class="hd"><span class="name">Beam ${i+1}</span><button class="btn small danger">remove</button></div>
+      <div class="hd"><span class="name">Beam ${i+1}</span>
+        <span style="display:flex;gap:8px;">
+          <button class="btn small" data-fit>fit to log</button>
+          <button class="btn small danger">remove</button>
+        </span></div>
       <div class="grid2 row">
         <div class="field"><label>Width</label><input type="number" step="0.0625" value="${b.w}"></div>
         <div class="field"><label>Height</label><input type="number" step="0.0625" value="${b.h}"></div>
@@ -1099,20 +1202,41 @@ function renderSoftwoodOptions(){
         <button class="${b.placement==='boxed'?'active':''}" data-p="boxed">Boxed heart</button>
         <button class="${b.placement==='fohc'?'active':''}" data-p="fohc">Free of heart center</button>
       </div>
+      <div class="warn" data-stat style="margin-top:8px;"></div>
     </div>`);
     card.querySelector('.btn.danger').onclick=()=>{ sw.beams.splice(i,1); renderAll(); };
     const [wIn,hIn,valIn] = card.querySelectorAll('input');
-    wIn.oninput=e=>b.w=parseFloat(e.target.value)||0;
-    hIn.oninput=e=>b.h=parseFloat(e.target.value)||0;
+    wIn.oninput=e=>{ b.w=parseFloat(e.target.value)||0; updateBeamUI(); };
+    hIn.oninput=e=>{ b.h=parseFloat(e.target.value)||0; updateBeamUI(); };
     valIn.oninput=e=>b.value=parseFloat(e.target.value)||0;
     card.querySelectorAll('[data-p]').forEach(btn=>btn.onclick=()=>{ b.placement=btn.dataset.p; renderAll(); });
+    card.querySelector('[data-fit]').onclick=()=>{
+      const g = beamGeomCtx();
+      const placement = sw.beams[0].placement;
+      const others = sw.beams.filter((x,j)=>j!==i);
+      const othersW = others.reduce((s,o)=>s+o.w,0) + (others.length? g.kerf:0);
+      // keep the height, shrink the width to the most this log allows (rounded down to
+      // 1/4"); if even a sliver won't fit at this height, drop the height to the max first
+      const envH = Math.max(b.h, ...others.map(o=>o.h), 0);
+      let maxW = beamMaxWidthAt(envH, placement, g.xs,g.L,g.dL,g.dS,g.bow) - othersW;
+      if(maxW < 0.5){
+        b.h = beamMaxHeightFor(othersW + Math.min(b.w,1), placement, g.xs,g.L,g.dL,g.dS,g.bow);
+        hIn.value = b.h;
+        const envH2 = Math.max(b.h, ...others.map(o=>o.h), 0);
+        maxW = beamMaxWidthAt(envH2, placement, g.xs,g.L,g.dL,g.dS,g.bow) - othersW;
+      }
+      if(maxW >= 0.25){ b.w = Math.floor(maxW*4)/4; wIn.value = b.w; }
+      updateBeamUI();
+    };
+    beamCards.push({card, b, i});
     beamList.appendChild(card);
   });
 
   wrap.querySelector('#add-beam').onclick=()=>{
     if(sw.beams.length<2){ sw.beams.push({w:8,h:4,placement:'boxed',value:1.20}); renderAll(); }
   };
-  wrap.querySelector('#kerf-ov').oninput=e=>{ sw.kerfOverride = e.target.value===''? null : (parseFloat(e.target.value)||0); };
+  wrap.querySelector('#kerf-ov').oninput=e=>{ sw.kerfOverride = e.target.value===''? null : (parseFloat(e.target.value)||0); updateBeamUI(); };
+  updateBeamUI();
 
   return wrap;
 }
@@ -1173,6 +1297,19 @@ function renderResults(){
     <label>Board layout</label>
     <canvas id="xsec" width="800" height="620"></canvas>
     <div id="legend" style="display:flex;flex-wrap:wrap;gap:10px 16px;margin:10px 0 4px;"></div>
+    <div style="display:flex;align-items:center;gap:12px;margin-top:12px;margin-bottom:12px;">
+      <span class="unit" style="margin:0;">slice</span>
+      <input type="range" id="slice-pos" min="0" max="100" step="0.5" style="flex:1;">
+      <span class="unit" id="slice-readout" style="margin:0;white-space:nowrap;"></span>
+    </div>
+    <label>Mill orientation — drag to rotate, pinch/scroll to zoom</label>
+    <canvas id="mill3d" width="800" height="560" style="touch-action:none;cursor:grab;"></canvas>
+    <div style="display:flex;align-items:center;gap:12px;margin-top:8px;">
+      <button class="btn small" id="roll-ccw">&#8634; Roll</button>
+      <span class="unit" id="roll-readout" style="flex:1;text-align:center;margin:0;"></span>
+      <button class="btn small" id="roll-cw">Roll &#8635;</button>
+    </div>
+    <p class="footnote" style="margin-top:6px;margin-bottom:10px;">The log as loaded on the mill, seen from above by default (drag to tilt/orbit): bed grid underneath, blade cutting horizontally from the top down, large end at left. The yellow stripe is the N face (up for the opening cut); the cyan stripe is the E face — matching the N/E letters on the layout above. After each rotation, whichever stripe faces up is the face the blade sees next. The slider slices along the log: the white ring appears in BOTH views — here as the cut plane, and on the board layout above as a live circle over the plan, so you can watch the log close in on the boards as you approach the small end. The Roll buttons turn the log a quarter turn at a time, exactly like rolling it on the bed with a cant hook — the stripes, the bow, the plan, and the compass letters all turn together, and the readout shows which face is up. Drag until the small end faces you and the view lines up exactly with the board layout.</p>
     <div class="statgrid" style="margin-top:10px;">
       <div class="stat"><div class="label">Yield</div><div class="val">${r.yieldPct}%</div></div>
       <div class="stat"><div class="label">Board feet</div><div class="val">${r.totalBF + (r.bonusBF||0) + (r.beamBF||0) + (r.customBF||0)}</div></div>
@@ -1373,32 +1510,106 @@ function renderResults(){
     Board layout shown at one representative cross-section — every board runs the log's full length. All figures rounded to whole numbers.</p>`);
   wrap.appendChild(foot);
 
-  setTimeout(()=>drawCrossSection(wrap.querySelector('#xsec'), r),0);
+  setTimeout(()=>{
+    const xsec = wrap.querySelector('#xsec');
+    drawCrossSection(xsec, r);
+    const m3 = wrap.querySelector('#mill3d');
+    if(m3){
+      drawMill3d(m3, r);
+      attachMillDrag(m3, r);
+      const sliceIn = wrap.querySelector('#slice-pos');
+      const sliceOut = wrap.querySelector('#slice-readout');
+      const rollOut = wrap.querySelector('#roll-readout');
+      function redrawBoth(){ drawMill3d(m3, r); drawCrossSection(xsec, r); }
+      function updateSliceReadout(){
+        const sx = r.L * millView.slice;
+        sliceOut.textContent = `${fmt(sx/12,1)} ft from large end · ${fmt(taperDia(sx,r.L,r.dL,r.dS),1)}" dia`;
+      }
+      function updateRollReadout(){
+        rollOut.textContent = `${['N','E','S','W'][((millView.rollQ||0)%4+4)%4]} face up`;
+      }
+      sliceIn.value = Math.round(millView.slice*100);
+      sliceIn.oninput = e=>{
+        millView.slice = Math.max(0, Math.min(1, (parseFloat(e.target.value)||0)/100));
+        redrawBoth();
+        updateSliceReadout();
+      };
+      wrap.querySelector('#roll-ccw').onclick=()=>{ millView.rollQ=((millView.rollQ||0)+1)%4; redrawBoth(); updateRollReadout(); };
+      wrap.querySelector('#roll-cw').onclick=()=>{ millView.rollQ=((millView.rollQ||0)+3)%4; redrawBoth(); updateRollReadout(); };
+      updateSliceReadout();
+      updateRollReadout();
+    }
+  },0);
   return wrap;
 }
 
 const PALETTE = ['#d99150','#7fb88a','#8fb8c9','#e2664a','#c9a94f','#a084c4','#6bb1b8','#d97fa0','#9fcf6b','#e0b04f','#6f9bd9'];
 function paletteColor(name, order){ const idx = order.indexOf(name); return PALETTE[(idx>=0?idx:0) % PALETTE.length]; }
 
+// The three reference sections, color- and dash-matched between the board-layout view and the
+// 3D mill view: solid blue = tightest (binding) section, dashed green = small end, dotted
+// pink = large end. Deliberately distinct from the amber N / teal E orientation stripes.
+const RING_STYLE = {
+  tight: {color:'#6f9db3', dash:[]},
+  small: {color:'#8fd39c', dash:[7,5]},
+  large: {color:'#d97fa0', dash:[2,6]}
+};
+
+// Orientation stripe colors — vivid hues used nowhere else in the app (not in the board
+// palette, ring styles, or theme), so N/E can never be confused with a board or a section ring.
+const DIR_N_COLOR = '#ffd94a'; // N face — yellow
+const DIR_E_COLOR = '#40d6ff'; // E face — cyan
+
 function drawCrossSection(canvas, r){
   const ctx = canvas.getContext('2d');
   const W=canvas.width,H=canvas.height;
   ctx.clearRect(0,0,W,H);
+  BOW_PEAK_FRAC = (r.bowPeak ?? 50)/100;
   const cx=W/2, cy=H/2;
   const env = r.envelope || {r:r.dS/2, y:0};
   const dia = env.r*2;
-  const scale = Math.min(W,H)*0.4 / (dia/2);
-  const R = (dia/2)*scale;
-  const circleCy = cy - env.y*scale;
+  const lineCol = getComputedStyle(document.documentElement).getPropertyValue('--line');
+  const dimCol = getComputedStyle(document.documentElement).getPropertyValue('--line-dim');
+  const textDimCol = getComputedStyle(document.documentElement).getPropertyValue('--text-dim');
+  // scale to the largest circle drawn (the large end) so both end outlines fit around the plan
+  const maxCircleR = Math.max(r.dL, r.dS, dia)/2;
+  const scale = Math.min(W,H)*0.42 / maxCircleR;
+  const R = env.r*scale;
+  const RL = (r.dL/2)*scale, RS = (r.dS/2)*scale;
 
-  ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--line');
+  // roll: quarter-turn rotation of the log (and everything cut into it) about its axis,
+  // viewed from the small end. Screen-up is always "up on the mill" — rolling moves the
+  // log's faces and the plan around together, like turning the log with a cant hook.
+  const rollQ = ((millView.rollQ||0)%4+4)%4;
+  const swapWH = rollQ%2===1;
+  function rollPt(a,b){
+    if(rollQ===1) return [-b,a];
+    if(rollQ===2) return [-a,-b];
+    if(rollQ===3) return [b,-a];
+    return [a,b];
+  }
+  const [envA,envB] = rollPt(0, env.y);
+  const circleCx = cx + envA*scale, circleCy = cy - envB*scale;
+
+  // both log ends for reference — bow is zero at the ends, so both sit centered on the pith axis
+  ctx.lineWidth=1.5;
+  ctx.strokeStyle = RING_STYLE.large.color;
+  ctx.setLineDash(RING_STYLE.large.dash);
+  ctx.beginPath(); ctx.arc(cx,cy,RL,0,Math.PI*2); ctx.stroke();
+  ctx.strokeStyle = RING_STYLE.small.color;
+  ctx.setLineDash(RING_STYLE.small.dash);
+  ctx.beginPath(); ctx.arc(cx,cy,RS,0,Math.PI*2); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // binding (tightest) slice — the section the plan is actually packed against
+  ctx.strokeStyle = RING_STYLE.tight.color;
   ctx.lineWidth=2;
-  ctx.beginPath(); ctx.arc(cx,circleCy,R,0,Math.PI*2); ctx.stroke();
-  ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--line-dim');
+  ctx.beginPath(); ctx.arc(circleCx,circleCy,R,0,Math.PI*2); ctx.stroke();
+  ctx.strokeStyle = dimCol;
   ctx.setLineDash([3,4]);
   ctx.lineWidth=1.5;
-  ctx.beginPath(); ctx.moveTo(cx-R-10,circleCy); ctx.lineTo(cx+R+10,circleCy); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(cx,circleCy-R-10); ctx.lineTo(cx,circleCy+R+10); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(circleCx-R-10,circleCy); ctx.lineTo(circleCx+R+10,circleCy); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(circleCx,circleCy-R-10); ctx.lineTo(circleCx,circleCy+R+10); ctx.stroke();
   ctx.setLineDash([]);
 
   function labelWithOutline(label, x, y, size){
@@ -1408,8 +1619,9 @@ function drawCrossSection(canvas, r){
   }
 
   function rect(wIn,hIn,cxIn,cyIn,color,label,labelColor){
-    const w=wIn*scale, h=hIn*scale;
-    const x=cx+cxIn*scale-w/2, y=cy-cyIn*scale-h/2;
+    const [ra,rb]=rollPt(cxIn,cyIn);
+    const w=(swapWH?hIn:wIn)*scale, h=(swapWH?wIn:hIn)*scale;
+    const x=cx+ra*scale-w/2, y=cy-rb*scale-h/2;
     ctx.fillStyle=color+'99'; ctx.fillRect(x,y,w,h);
     ctx.strokeStyle=color; ctx.lineWidth=2.5; ctx.strokeRect(x,y,w,h);
     if(label && w>60 && h>26){
@@ -1432,23 +1644,26 @@ function drawCrossSection(canvas, r){
   }
 
   function rectPlacement(p,color){
-    const w=p.width*scale, h=p.height*scale;
-    const x=p._cx*scale+cx-w/2, y=cy-p._cy*scale-h/2;
+    const [ra,rb]=rollPt(p._cx,p._cy);
+    const w=(swapWH?p.height:p.width)*scale, h=(swapWH?p.width:p.height)*scale;
+    const x=cx+ra*scale-w/2, y=cy-rb*scale-h/2;
     rectAt(w,h,x,y,color,p.name,p.rotated,p.bonus);
   }
 
   // Absolute-coordinate placement (used for the softwood wing growth courses, which aren't
   // confined to one pre-sized pocket rectangle the way the old zone model was).
   function rectAbs(p,color){
-    const w=p.width*scale, h=p.height*scale;
-    const x=cx+p.cxIn*scale-w/2, y=cy-p.cyIn*scale-h/2;
+    const [ra,rb]=rollPt(p.cxIn,p.cyIn);
+    const w=(swapWH?p.height:p.width)*scale, h=(swapWH?p.width:p.height)*scale;
+    const x=cx+ra*scale-w/2, y=cy-rb*scale-h/2;
     rectAt(w,h,x,y,color,p.name,p.rotated,p.bonus);
   }
 
   function dashedOutline(zoneCxIn, zoneCyIn, zoneW, zoneH){
     if(zoneW<=0||zoneH<=0) return;
-    const w=zoneW*scale, h=zoneH*scale;
-    const x=cx+zoneCxIn*scale-w/2, y=cy-zoneCyIn*scale-h/2;
+    const [ra,rb]=rollPt(zoneCxIn,zoneCyIn);
+    const w=(swapWH?zoneH:zoneW)*scale, h=(swapWH?zoneW:zoneH)*scale;
+    const x=cx+ra*scale-w/2, y=cy-rb*scale-h/2;
     ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--chalk');
     ctx.setLineDash([6,5]); ctx.lineWidth=1.75;
     ctx.strokeRect(x,y,w,h);
@@ -1493,8 +1708,9 @@ function drawCrossSection(canvas, r){
     }
     if(r.noFitRect){
       dashedOutline(0, r.noFitRect.c, r.noFitRect.W, r.noFitRect.H);
-      const w=r.noFitRect.W*scale, h=r.noFitRect.H*scale;
-      const x=cx-w/2, y=cy-r.noFitRect.c*scale-h/2;
+      const [na,nb]=rollPt(0,r.noFitRect.c);
+      const w=(swapWH?r.noFitRect.H:r.noFitRect.W)*scale, h=(swapWH?r.noFitRect.W:r.noFitRect.H)*scale;
+      const x=cx+na*scale-w/2, y=cy-nb*scale-h/2;
       ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--chalk');
       labelWithOutline(`max: ${fmt(r.noFitRect.W,1)}"x${fmt(r.noFitRect.H,1)}"`, x+w/2, y+h/2+6, 18);
     }
@@ -1507,8 +1723,9 @@ function drawCrossSection(canvas, r){
     }
     if(r.noFitRect){
       dashedOutline(0, r.noFitRect.c, r.noFitRect.W, r.noFitRect.H);
-      const w=r.noFitRect.W*scale, h=r.noFitRect.H*scale;
-      const x=cx-w/2, y=cy-r.noFitRect.c*scale-h/2;
+      const [na,nb]=rollPt(0,r.noFitRect.c);
+      const w=(swapWH?r.noFitRect.H:r.noFitRect.W)*scale, h=(swapWH?r.noFitRect.W:r.noFitRect.H)*scale;
+      const x=cx+na*scale-w/2, y=cy-nb*scale-h/2;
       ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--chalk');
       labelWithOutline(`max: ${fmt(r.noFitRect.W,1)}"x${fmt(r.noFitRect.H,1)}"`, x+w/2, y+h/2+6, 18);
     }
@@ -1521,34 +1738,299 @@ function drawCrossSection(canvas, r){
       return `${fmt(b.width,1)}x${fmt(b.t,2)}`;
     }
     (r.customBoards||[]).forEach(b=>{
-      const wIn = b.side==='top' ? b.width : b.t;
-      const hIn = b.side==='top' ? b.t : b.width;
+      let wIn = b.side==='top' ? b.width : b.t;
+      let hIn = b.side==='top' ? b.t : b.width;
+      if(swapWH){ const t=wIn; wIn=hIn; hIn=t; }
+      const [ra,rb]=rollPt(b.cxIn,b.cyIn);
       const w=wIn*scale, h=hIn*scale;
-      const x=cx+b.cxIn*scale-w/2, y=cy-b.cyIn*scale-h/2;
+      const x=cx+ra*scale-w/2, y=cy-rb*scale-h/2;
       ctx.strokeStyle = '#6bb1b8'; ctx.lineWidth=2.5;
       ctx.strokeRect(x,y,w,h);
       const label = customBoardLabel(b);
-      if(b.side==='top'){
-        if(w>18 && h>18){
-          ctx.fillStyle = '#6bb1b8';
-          labelWithOutline(label, x+w/2, y+h/2+4, 12);
-        }
-      } else {
-        if(w>18 && h>28){
-          ctx.save();
-          ctx.translate(x+w/2, y+h/2);
-          ctx.rotate(-Math.PI/2);
-          ctx.fillStyle = '#6bb1b8';
-          labelWithOutline(label, 0, 6, 18);
-          ctx.restore();
-        }
+      ctx.fillStyle = '#6bb1b8';
+      if(w>=h){
+        if(w>18 && h>18) labelWithOutline(label, x+w/2, y+h/2+4, 12);
+      } else if(w>18 && h>28){
+        ctx.save();
+        ctx.translate(x+w/2, y+h/2);
+        ctx.rotate(-Math.PI/2);
+        labelWithOutline(label, 0, 6, 18);
+        ctx.restore();
       }
     });
   }
 
-  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text-dim');
+  // circle key, top-left corner
+  function keyLine(y, dash, width, col, txt){
+    ctx.strokeStyle=col; ctx.lineWidth=width; ctx.setLineDash(dash);
+    ctx.beginPath(); ctx.moveTo(14,y); ctx.lineTo(46,y); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle=textDimCol; ctx.font='12px IBM Plex Mono'; ctx.textAlign='left';
+    ctx.fillText(txt, 54, y+4);
+  }
+  keyLine(20, RING_STYLE.tight.dash, 2, RING_STYLE.tight.color, `tightest ${fmt(dia,1)}"`);
+  keyLine(40, RING_STYLE.small.dash, 1.5, RING_STYLE.small.color, `small end ${fmt(r.dS,1)}"`);
+  keyLine(60, RING_STYLE.large.dash, 1.5, RING_STYLE.large.color, `large end ${fmt(r.dL,1)}"`);
+
+  // live slice ring — the log's true cross-section at the slider position (white in both views)
+  const chalkCol = getComputedStyle(document.documentElement).getPropertyValue('--chalk');
+  if(typeof millView.slice==='number'){
+    const sx = r.L*Math.max(0, Math.min(1, millView.slice));
+    const srr = taperDia(sx,r.L,r.dL,r.dS)/2;
+    const [sa,sb] = rollPt(0, bowOffset(sx,r.L,r.bow));
+    ctx.strokeStyle=chalkCol; ctx.lineWidth=2.5;
+    ctx.beginPath(); ctx.arc(cx+sa*scale, cy-sb*scale, srr*scale, 0, Math.PI*2); ctx.stroke();
+    keyLine(80, [], 2.5, chalkCol, `slice ${fmt(srr*2,1)}"`);
+  }
+
+  // compass — the log's faces, so the letters roll with the log. Same N/E/S/W naming as the
+  // wing/pocket tables and the mill-orientation view below. Screen-up = up on the mill.
+  function compassAt(letter, a, b){
+    const [ra,rb]=rollPt(a,b);
+    labelWithOutline(letter, cx+ra*(RL+16), cy-rb*(RL+16)+5, 15);
+  }
+  ctx.fillStyle = DIR_N_COLOR; compassAt('N',0,1);
+  ctx.fillStyle = DIR_E_COLOR; compassAt('E',1,0);
+  ctx.fillStyle = textDimCol;  compassAt('S',0,-1); compassAt('W',-1,0);
+
+  ctx.fillStyle = textDimCol;
   ctx.font='14px IBM Plex Mono'; ctx.textAlign='center';
-  ctx.fillText(`shown at the log's tightest cross-section (${fmt(dia,1)}" dia) along its length`, cx, H-14);
+  ctx.fillText(`viewed from the small end · boards packed at the tightest section (${fmt(dia,1)}" dia)`, cx, H-14);
+}
+
+// ---------- 3D mill-orientation viewer ----------
+// Lightweight wireframe renderer — no libraries, keeps the app a single self-contained file.
+// World frame matches the mill: x runs along the bed from the large end toward the small end
+// (blade travel), y across the bed, z up. The board-layout view above is this same scene
+// viewed from the small end, so its N (up) and E (screen right) are the amber and teal
+// stripes here. Orbit angles persist across re-renders so the view doesn't snap back.
+// Defaults to a (near) top-down plan view, large end at left — drag tilts/orbits from there.
+// slice is the slicer position as a fraction of the log's length from the large end.
+// rollQ is the log's roll in quarter turns (0-3), CCW viewed from the small end — shared by
+// the board-layout view and the 3D view so both always show the same physical orientation.
+const millView = { yaw:0, pitch:1.35, zoom:1, slice:0.5, rollQ:0 };
+
+function drawMill3d(canvas, r){
+  const ctx = canvas.getContext('2d');
+  const W=canvas.width, H=canvas.height;
+  ctx.clearRect(0,0,W,H);
+  BOW_PEAK_FRAC = (r.bowPeak ?? 50)/100;
+  const {dL,dS,L,bow} = r;
+  const maxR = Math.max(dL,dS)/2 || 1;
+  const css = v => getComputedStyle(document.documentElement).getPropertyValue(v);
+
+  // roll — same quarter-turn convention as the board-layout view (CCW viewed from small end)
+  const rollQ = ((millView.rollQ||0)%4+4)%4;
+  const rollA = rollQ*Math.PI/2;
+  function rot2(a,b){
+    if(rollQ===1) return [-b,a];
+    if(rollQ===2) return [-a,-b];
+    if(rollQ===3) return [b,-a];
+    return [a,b];
+  }
+
+  const s3 = (W*0.82) / (L*1.15) * (millView.zoom||1);
+  const cx=W/2, cyv=H*0.52;
+  const cyaw=Math.cos(millView.yaw), syaw=Math.sin(millView.yaw);
+  const cp=Math.cos(millView.pitch), sp=Math.sin(millView.pitch);
+  // perspective projection: points foreshorten with distance from the camera. The returned
+  // third element is camera-space depth, used to painter-sort the log body's faces.
+  const camD = L*2.4;
+  function P(x,y,z){
+    const xw = x - L/2;
+    const x1 = xw*cyaw - y*syaw;
+    const y1 = xw*syaw + y*cyaw;
+    const zv = y1*sp + z*cp;      // screen-vertical
+    const d  = y1*cp - z*sp;      // depth, positive = away from camera
+    const f  = camD/(camD + d);
+    return [cx + x1*s3*f, cyv - zv*s3*f, d];
+  }
+  function line3(a,b){ ctx.beginPath(); ctx.moveTo(a[0],a[1]); ctx.lineTo(b[0],b[1]); ctx.stroke(); }
+  function poly3(pts,close){ ctx.beginPath(); pts.forEach((p,i)=> i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1])); if(close)ctx.closePath(); ctx.stroke(); }
+
+  // mill bed — a grid just below the log's lowest surface
+  let bedZ = Infinity;
+  for(let i=0;i<=20;i++){ const x=L*i/20; bedZ = Math.min(bedZ, rot2(0,bowOffset(x,L,bow))[1] - taperDia(x,L,dL,dS)/2); }
+  bedZ -= 0.6;
+  ctx.strokeStyle = css('--line-dim'); ctx.lineWidth=1;
+  const bedY = maxR*1.8, bedX0=-L*0.05, bedX1=L*1.05;
+  for(let i=0;i<=4;i++){ const y=-bedY+2*bedY*i/4; line3(P(bedX0,y,bedZ), P(bedX1,y,bedZ)); }
+  for(let i=0;i<=8;i++){ const x=bedX0+(bedX1-bedX0)*i/8; line3(P(x,-bedY,bedZ), P(x,bedY,bedZ)); }
+
+  // solid translucent log body — longitudinal surface strips plus end caps, top-lit and
+  // painter-sorted back-to-front so the far side shows through the near side and the cant
+  // prism / slice plane read as being inside the wood.
+  {
+    const BSEG=28, BR=10;
+    const ringPts=[];
+    for(let i=0;i<=BR;i++){
+      const x=L*i/BR, rr=taperDia(x,L,dL,dS)/2;
+      const [yc,zc]=rot2(0, bowOffset(x,L,bow));
+      const row=[];
+      for(let k=0;k<BSEG;k++){
+        const a=2*Math.PI*k/BSEG;
+        row.push(P(x, yc+rr*Math.cos(a), zc+rr*Math.sin(a)));
+      }
+      ringPts.push(row);
+    }
+    const faces=[];
+    for(let k=0;k<BSEG;k++){
+      const k2=(k+1)%BSEG;
+      const pts=[];
+      for(let i=0;i<=BR;i++) pts.push(ringPts[i][k]);
+      for(let i=BR;i>=0;i--) pts.push(ringPts[i][k2]);
+      // top-lit: strips whose outward normal points up are brighter (angle is already in
+      // mill frame — the surface of revolution is roll-invariant, only the stripes roll)
+      const aMid=2*Math.PI*(k+0.5)/BSEG;
+      const shade = 0.55 + 0.45*Math.max(0, Math.sin(aMid));
+      const depth = pts.reduce((s,p)=>s+p[2],0)/pts.length;
+      faces.push({pts, shade, depth});
+    }
+    [0,BR].forEach(i=>{
+      const pts=ringPts[i].slice();
+      faces.push({pts, shade:0.8, depth: pts.reduce((s,p)=>s+p[2],0)/pts.length});
+    });
+    faces.sort((a,b)=>b.depth-a.depth);
+    faces.forEach(f=>{
+      ctx.fillStyle=`rgba(${Math.round(217*f.shade)},${Math.round(145*f.shade)},${Math.round(80*f.shade)},0.30)`;
+      ctx.beginPath();
+      f.pts.forEach((p,i)=> i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));
+      ctx.closePath();
+      ctx.fill();
+    });
+  }
+
+  // log wireframe — rings along the length (taper + bow)
+  const RINGS=8, SEG=28;
+  function ringAt(x, color, width, dash){
+    const rr=taperDia(x,L,dL,dS)/2;
+    const [yc,zc]=rot2(0, bowOffset(x,L,bow));
+    const pts=[];
+    for(let k=0;k<SEG;k++){ const a=2*Math.PI*k/SEG; pts.push(P(x, yc+rr*Math.cos(a), zc+rr*Math.sin(a))); }
+    ctx.strokeStyle=color; ctx.lineWidth=width; ctx.setLineDash(dash||[]);
+    poly3(pts,true);
+    ctx.setLineDash([]);
+  }
+  for(let i=1;i<RINGS;i++) ringAt(L*i/RINGS, css('--line'), 0.6, []);
+  // orientation stripes along the log surface
+  function seam(angle,color,width){
+    const STEPS=RINGS*3, pts=[];
+    const rolled = angle + rollA;
+    for(let i=0;i<=STEPS;i++){
+      const x=L*i/STEPS, rr=taperDia(x,L,dL,dS)/2;
+      const [yc,zc]=rot2(0, bowOffset(x,L,bow));
+      pts.push(P(x, yc+rr*Math.cos(rolled), zc+rr*Math.sin(rolled)));
+    }
+    ctx.strokeStyle=color; ctx.lineWidth=width; poly3(pts,false);
+  }
+  seam(-Math.PI/2, css('--line-dim'), 1);  // S
+  seam(Math.PI, css('--line-dim'), 1);     // W
+  seam(Math.PI/2, DIR_N_COLOR, 3);         // N — faces up for the opening cut
+  seam(0, DIR_E_COLOR, 3);                 // E — screen-right in the layout view
+
+  // the three reference sections, color/dash-matched to the board-layout view above
+  ringAt(0, RING_STYLE.large.color, 2, RING_STYLE.large.dash);
+  ringAt(L, RING_STYLE.small.color, 2, RING_STYLE.small.dash);
+  const tightX = (r.envelope && typeof r.envelope.x==='number') ? r.envelope.x : L;
+  ringAt(tightX, RING_STYLE.tight.color, 2.5, RING_STYLE.tight.dash);
+
+  // the planned cant as a straight prism — straight sawing, so the log bows around it
+  let cant=null;
+  if(r.species==='softwood') cant = r.mainCant || (r.beamEnvelope ? {W:r.beamEnvelope.Wb, H:r.beamEnvelope.Hb, c:r.beamEnvelope.c} : null);
+  else if(r.fits) cant = {W:r.W, H:r.cantH, c:r.cantC};
+  if(!cant && r.noFitRect) cant = {W:r.noFitRect.W, H:r.noFitRect.H, c:r.noFitRect.c};
+  if(cant && cant.W>0 && cant.H>0){
+    const y0=-cant.W/2, y1=cant.W/2, z0=cant.c-cant.H/2, z1=cant.c+cant.H/2;
+    ctx.strokeStyle = css('--chalk'); ctx.lineWidth=1.5; ctx.setLineDash([6,5]);
+    function PC(x,a,b){ const [ry,rz]=rot2(a,b); return P(x,ry,rz); }
+    const c000=PC(0,y0,z0),c001=PC(0,y0,z1),c010=PC(0,y1,z0),c011=PC(0,y1,z1);
+    const c100=PC(L,y0,z0),c101=PC(L,y0,z1),c110=PC(L,y1,z0),c111=PC(L,y1,z1);
+    [[c000,c001],[c001,c011],[c011,c010],[c010,c000],
+     [c100,c101],[c101,c111],[c111,c110],[c110,c100],
+     [c000,c100],[c001,c101],[c011,c111],[c010,c110]].forEach(pr=>line3(pr[0],pr[1]));
+    ctx.setLineDash([]);
+  }
+
+  // slicer — a vertical cut plane at the slider position, with the true cross-section ring.
+  // In the top-down default view the plane reads as a vertical handle across the log.
+  if(typeof millView.slice==='number'){
+    const sx = L*Math.max(0, Math.min(1, millView.slice));
+    const srr = taperDia(sx,L,dL,dS)/2;
+    const szc = rot2(0, bowOffset(sx,L,bow))[1];
+    const zTop = szc+srr+1.2;
+    const q = [P(sx,-bedY,bedZ), P(sx,bedY,bedZ), P(sx,bedY,zTop), P(sx,-bedY,zTop)];
+    ctx.beginPath(); q.forEach((p,i)=> i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1])); ctx.closePath();
+    ctx.fillStyle = 'rgba(238,248,251,0.07)'; ctx.fill();
+    ctx.strokeStyle = css('--chalk'); ctx.lineWidth=1.5; ctx.stroke();
+    ringAt(sx, css('--chalk'), 3, []);
+  }
+
+  // labels
+  ctx.font='bold 12px IBM Plex Mono'; ctx.textAlign='center';
+  ctx.fillStyle = css('--text-dim');
+  const pLarge=P(0,0,bedZ), pSmall=P(L,0,bedZ);
+  ctx.fillText('LARGE END', pLarge[0], pLarge[1]+18);
+  ctx.fillText('SMALL END', pSmall[0], pSmall[1]+18);
+  ctx.font='bold 16px IBM Plex Mono';
+  const letterR = dS/2+1.5, nA = Math.PI/2+rollA, eA = rollA;
+  ctx.fillStyle = DIR_N_COLOR;
+  const nP=P(L*1.06, letterR*Math.cos(nA), letterR*Math.sin(nA)); ctx.fillText('N', nP[0], nP[1]);
+  ctx.fillStyle = DIR_E_COLOR;
+  const eP=P(L*1.06, letterR*Math.cos(eA), letterR*Math.sin(eA)); ctx.fillText('E', eP[0], eP[1]);
+
+  // section key, top-left — same colors and dashes as the board-layout view
+  const tightDia = r.envelope ? r.envelope.r*2 : dS;
+  function key3(y, style, txt){
+    ctx.strokeStyle=style.color; ctx.lineWidth=2; ctx.setLineDash(style.dash);
+    ctx.beginPath(); ctx.moveTo(14,y); ctx.lineTo(46,y); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle=css('--text-dim'); ctx.font='12px IBM Plex Mono'; ctx.textAlign='left';
+    ctx.fillText(txt, 54, y+4);
+  }
+  key3(20, RING_STYLE.tight, `tightest ${fmt(tightDia,1)}"`);
+  key3(40, RING_STYLE.small, `small end ${fmt(dS,1)}"`);
+  key3(60, RING_STYLE.large, `large end ${fmt(dL,1)}"`);
+
+  ctx.fillStyle = css('--text-dim'); ctx.font='12px IBM Plex Mono'; ctx.textAlign='center';
+  ctx.fillText('drag to rotate · pinch or scroll to zoom · double-tap to reset', cx, H-10);
+}
+
+function clampZoom(z){ return Math.max(0.5, Math.min(8, z)); }
+
+function attachMillDrag(canvas, r){
+  const pointers = new Map();
+  let lastPinchDist = 0;
+  canvas.onpointerdown = e=>{
+    pointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+    canvas.setPointerCapture(e.pointerId);
+    if(pointers.size===2){
+      const [a,b]=[...pointers.values()];
+      lastPinchDist = Math.hypot(a.x-b.x, a.y-b.y);
+    }
+  };
+  canvas.onpointermove = e=>{
+    const p = pointers.get(e.pointerId);
+    if(!p) return;
+    if(pointers.size===1){
+      millView.yaw += (e.clientX-p.x)*0.01;
+      millView.pitch = Math.max(-1.35, Math.min(1.35, millView.pitch + (e.clientY-p.y)*0.008));
+    }
+    p.x=e.clientX; p.y=e.clientY;
+    if(pointers.size===2){
+      const [a,b]=[...pointers.values()];
+      const dist = Math.hypot(a.x-b.x, a.y-b.y);
+      if(lastPinchDist>0 && dist>0) millView.zoom = clampZoom(millView.zoom * dist/lastPinchDist);
+      lastPinchDist = dist;
+    }
+    drawMill3d(canvas, r);
+  };
+  const endPointer = e=>{ pointers.delete(e.pointerId); lastPinchDist = 0; };
+  canvas.onpointerup = endPointer;
+  canvas.onpointercancel = endPointer;
+  canvas.onwheel = e=>{
+    e.preventDefault();
+    millView.zoom = clampZoom(millView.zoom * Math.exp(-e.deltaY*0.0012));
+    drawMill3d(canvas, r);
+  };
+  canvas.ondblclick = ()=>{ millView.zoom = 1; drawMill3d(canvas, r); };
 }
 
 // Build the web app manifest at runtime (avoids needing a second manifest.json file)
