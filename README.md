@@ -26,14 +26,14 @@ Tips for reading the results:
 
 Open this address in the phone's browser:
 
-**https://zdenek169-cell.github.io/Milling/**
+**https://zdenek169-cell.github.io/Sawmill-app/**
 
 - **iPhone**: open it in Safari, tap the Share button, then "Add to Home Screen".
 - **Android**: open it in Chrome and choose "Install" when offered, or use the browser menu and pick "Install app".
 
 Either way it opens fullscreen with its own icon, and keeps working with no signal once it has loaded once.
 
-Note that the address ends in a slash and is a `github.io` page, not the `github.com` page where the code lives — the code page won't run the app. If you fork or rename the repository the address changes to match, and Pages has to be switched on in the repository settings (main branch, root folder).
+Note that the address ends in a slash and is a `github.io` page, not the `github.com` page where the code lives — the code page won't run the app. 
 
 ## What's in this repository
 
