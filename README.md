@@ -20,7 +20,7 @@ Tips for reading the results:
 - The cross-section drawing shows the log at its narrowest usable point. On a bowed log that's usually somewhere in the middle, not at the small end.
 - The slider moves a cut plane along the log's length. The white circle in both pictures shows exactly how big the log is at that spot.
 - The Roll buttons turn the log a quarter turn at a time, the same way you'd roll it on the mill bed. The yellow stripe marks the north face and the cyan stripe the east face, and the whole plan turns with the log. This makes it much easier to keep track of which face is which between cuts.
-- "Max yield" chooses the plan worth the most money based on your prices, not the one with the most wood. Put realistic prices in Settings first, or that ranking won't mean much.
+- The value figures come from the prices you enter in Settings. Put your own numbers in first, or treat them as a rough guide only.
 
 ## Putting it on your phone
 
