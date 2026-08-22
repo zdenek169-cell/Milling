@@ -1759,9 +1759,12 @@ function renderResults(){
       function updateRollReadout(){
         rollOut.textContent = `${['N','E','S','W'][((millView.rollQ||0)%4+4)%4]} face up`;
       }
-      sliceIn.value = Math.round(millView.slice*100);
+      // Slider is left-to-right small end → large end; millView.slice stays a fraction
+      // from the large end internally (used throughout the geometry code), so it's just
+      // inverted at the UI boundary here.
+      sliceIn.value = Math.round((1-millView.slice)*100);
       sliceIn.oninput = e=>{
-        millView.slice = Math.max(0, Math.min(1, (parseFloat(e.target.value)||0)/100));
+        millView.slice = Math.max(0, Math.min(1, 1-(parseFloat(e.target.value)||0)/100));
         redrawBoth();
         updateSliceReadout();
       };
@@ -2081,11 +2084,13 @@ function drawCrossSection(canvas, r){
 // (blade travel), y across the bed, z up. The board-layout view above is this same scene
 // viewed from the small end, so its N (up) and E (screen right) are the amber and teal
 // stripes here. Orbit angles persist across re-renders so the view doesn't snap back.
-// Defaults to a (near) top-down plan view, large end at left — drag tilts/orbits from there.
+// Defaults to an elevated 3/4 view: small end toward the viewer (lower left), large end
+// receding to the upper right — drag tilts/orbits from there.
 // slice is the slicer position as a fraction of the log's length from the large end.
 // rollQ is the log's roll in quarter turns (0-3), CCW viewed from the small end — shared by
 // the board-layout view and the 3D view so both always show the same physical orientation.
-const millView = { yaw:0, pitch:1.35, zoom:1, slice:0.5, rollQ:0 };
+const MILL_DEFAULT_YAW = -2.4, MILL_DEFAULT_PITCH = 0.9, MILL_DEFAULT_ZOOM = 1.6;
+const millView = { yaw:MILL_DEFAULT_YAW, pitch:MILL_DEFAULT_PITCH, zoom:MILL_DEFAULT_ZOOM, slice:0.5, rollQ:0 };
 
 function drawMill3d(canvas, r){
   const ctx = canvas.getContext('2d');
@@ -2337,7 +2342,7 @@ function attachMillDrag(canvas, r){
   };
   // full camera reset, as the caption promises — angle as well as zoom (slice and roll are
   // plan state, not camera state, so they stay put)
-  canvas.ondblclick = ()=>{ millView.zoom=1; millView.yaw=0; millView.pitch=1.35; drawMill3d(canvas, r); };
+  canvas.ondblclick = ()=>{ millView.zoom=MILL_DEFAULT_ZOOM; millView.yaw=MILL_DEFAULT_YAW; millView.pitch=MILL_DEFAULT_PITCH; drawMill3d(canvas, r); };
 }
 
 // The manifest is a real file (manifest.json) rather than a runtime blob: Android/Chrome
