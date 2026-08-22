@@ -2089,7 +2089,7 @@ function drawCrossSection(canvas, r){
 // slice is the slicer position as a fraction of the log's length from the large end.
 // rollQ is the log's roll in quarter turns (0-3), CCW viewed from the small end — shared by
 // the board-layout view and the 3D view so both always show the same physical orientation.
-const MILL_DEFAULT_YAW = -2.4, MILL_DEFAULT_PITCH = 0.9, MILL_DEFAULT_ZOOM = 1.6;
+const MILL_DEFAULT_YAW = -2, MILL_DEFAULT_PITCH = 0.18, MILL_DEFAULT_ZOOM = 2.1;
 const millView = { yaw:MILL_DEFAULT_YAW, pitch:MILL_DEFAULT_PITCH, zoom:MILL_DEFAULT_ZOOM, slice:0.5, rollQ:0 };
 
 function drawMill3d(canvas, r){
